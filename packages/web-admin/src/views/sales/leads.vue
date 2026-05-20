@@ -434,7 +434,7 @@ async function fetchData() {
 async function fetchCustomers() {
   try {
     const res: any = await request.get('/customers', {
-      params: { pageSize: 9999 },
+      params: { pageSize: 100 },
     })
     customerList.value = res.list ?? []
   } catch {

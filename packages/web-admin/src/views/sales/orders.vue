@@ -433,7 +433,7 @@ async function fetchData() {
 async function fetchCustomers() {
   try {
     const res: any = await request.get('/customers', {
-      params: { pageSize: 9999 },
+      params: { pageSize: 100 },
     })
     customerList.value = res.list ?? []
   } catch {
@@ -457,7 +457,7 @@ async function fetchVehicles() {
 async function fetchSalesUsers() {
   try {
     const res: any = await request.get('/users', {
-      params: { pageSize: 9999 },
+      params: { pageSize: 100 },
     })
     salesUserList.value = res.list ?? []
   } catch {
