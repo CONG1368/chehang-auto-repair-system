@@ -25,9 +25,45 @@
       }
     },
     {
+      "path": "pages/repair/dispatch",
+      "style": {
+        "navigationBarTitleText": "技师派工"
+      }
+    },
+    {
+      "path": "pages/repair/quality",
+      "style": {
+        "navigationBarTitleText": "质检交车"
+      }
+    },
+    {
+      "path": "pages/repair/detail",
+      "style": {
+        "navigationBarTitleText": "工单详情"
+      }
+    },
+    {
       "path": "pages/customer/list",
       "style": {
         "navigationBarTitleText": "客户列表"
+      }
+    },
+    {
+      "path": "pages/customer/detail",
+      "style": {
+        "navigationBarTitleText": "客户详情"
+      }
+    },
+    {
+      "path": "pages/customer/follow",
+      "style": {
+        "navigationBarTitleText": "跟进记录"
+      }
+    },
+    {
+      "path": "pages/customer/remind",
+      "style": {
+        "navigationBarTitleText": "到期提醒"
       }
     },
     {
@@ -37,9 +73,111 @@
       }
     },
     {
+      "path": "pages/inventory/parts",
+      "style": {
+        "navigationBarTitleText": "配件管理"
+      }
+    },
+    {
+      "path": "pages/inventory/inbound",
+      "style": {
+        "navigationBarTitleText": "入库管理"
+      }
+    },
+    {
+      "path": "pages/inventory/purchase",
+      "style": {
+        "navigationBarTitleText": "采购管理"
+      }
+    },
+    {
       "path": "pages/finance/cashier",
       "style": {
         "navigationBarTitleText": "收银台"
+      }
+    },
+    {
+      "path": "pages/beauty/services",
+      "style": {
+        "navigationBarTitleText": "美容服务"
+      }
+    },
+    {
+      "path": "pages/beauty/packages",
+      "style": {
+        "navigationBarTitleText": "美容套餐"
+      }
+    },
+    {
+      "path": "pages/beauty/cards",
+      "style": {
+        "navigationBarTitleText": "会员卡"
+      }
+    },
+    {
+      "path": "pages/beauty/schedule",
+      "style": {
+        "navigationBarTitleText": "施工管理"
+      }
+    },
+    {
+      "path": "pages/finance/reports",
+      "style": {
+        "navigationBarTitleText": "对账报表"
+      }
+    },
+    {
+      "path": "pages/finance/receivable",
+      "style": {
+        "navigationBarTitleText": "应收应付"
+      }
+    },
+    {
+      "path": "pages/finance/profit",
+      "style": {
+        "navigationBarTitleText": "利润分析"
+      }
+    },
+    {
+      "path": "pages/system/profile",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    },
+    {
+      "path": "pages/system/users",
+      "style": {
+        "navigationBarTitleText": "用户管理"
+      }
+    },
+    {
+      "path": "pages/system/roles",
+      "style": {
+        "navigationBarTitleText": "角色管理"
+      }
+    },
+    {
+      "path": "pages/sales/vehicles",
+      "style": {
+        "navigationBarTitleText": "车辆管理"
+      }
+    },
+    {
+      "path": "pages/sales/leads",
+      "style": {
+        "navigationBarTitleText": "客户跟进"
+      }
+    },
+    {
+      "path": "pages/sales/orders",
+      "style": {
+        "navigationBarTitleText": "报价签约"
+      }
+    },
+    {
+      "path": "pages/sales/delivery",
+      "style": {
+        "navigationBarTitleText": "交车管理"
       }
     }
   ],
