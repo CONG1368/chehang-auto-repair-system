@@ -512,7 +512,7 @@ async function handleCustomerChange(customerId: number | null) {
     vehicleOptions.value = vehicleList
     customerVehicles.value = vehicleList
 
-    const repairsRes = (await request.get(`/customers/${customerId}/repairs`, { params: { pageSize: 5 } })) as any
+    const repairsRes = (await request.get(`/repair`, { params: { customerId, pageSize: 5 } })) as any
     const repairList = repairsRes.list || repairsRes.records || (Array.isArray(repairsRes) ? repairsRes : [])
     recentRepairs.value = (repairList as RecentRepair[]).slice(0, 5)
 

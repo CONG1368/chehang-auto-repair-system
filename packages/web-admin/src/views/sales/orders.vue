@@ -432,7 +432,7 @@ async function fetchData() {
 /** 获取客户列表 */
 async function fetchCustomers() {
   try {
-    const res: any = await request.get('/customer/list', {
+    const res: any = await request.get('/customers', {
       params: { pageSize: 9999 },
     })
     customerList.value = res.list ?? []

@@ -115,7 +115,7 @@ const loading = ref(false)
 async function fetchCards() {
   loading.value = true
   try {
-    const res: any = await request.get('/member-cards', {
+    const res: any = await request.get('/beauty/cards', {
       params: {
         page: pagination.page,
         pageSize: pagination.pageSize,

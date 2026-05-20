@@ -21,14 +21,14 @@ export const useAuthStore = defineStore(
     const userInfo = ref<UserInfo | null>(null);
 
     async function login(username: string, password: string) {
-      const res = await loginApi({ username, password });
-      token.value = res.data.token;
+      const res: any = await loginApi({ username, password });
+      token.value = res.token;
       await fetchUserInfo();
     }
 
     async function fetchUserInfo() {
-      const res = await getUserInfo();
-      userInfo.value = res.data;
+      const res: any = await getUserInfo();
+      userInfo.value = res;
     }
 
     function logout() {

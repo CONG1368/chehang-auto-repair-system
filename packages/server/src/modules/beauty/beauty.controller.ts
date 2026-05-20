@@ -82,4 +82,11 @@ export class BeautyController {
   updateStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.beautyService.updateAppointmentStatus(+id, status);
   }
+
+  // ==================== 会员卡 ====================
+
+  @Get('cards')
+  findAllCards(@Query() query: any) {
+    return this.beautyService.findAllCards(query);
+  }
 }

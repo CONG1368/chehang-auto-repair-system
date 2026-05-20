@@ -440,7 +440,7 @@ async function fetchParts() {
 /** 获取分类列表 */
 async function fetchCategories() {
   try {
-    const res: any = await request.get('/part-categories')
+    const res: any = await request.get('/inventory/categories')
     categoryList.value = res ?? []
   } catch {
     // 错误已在拦截器中处理
@@ -450,7 +450,7 @@ async function fetchCategories() {
 /** 获取供应商列表 */
 async function fetchSuppliers() {
   try {
-    const res: any = await request.get('/suppliers')
+    const res: any = await request.get('/inventory/suppliers')
     supplierList.value = res ?? []
   } catch {
     // 错误已在拦截器中处理

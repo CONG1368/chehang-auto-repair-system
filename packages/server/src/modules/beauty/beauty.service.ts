@@ -103,4 +103,29 @@ export class BeautyService {
       data,
     });
   }
+
+  // ==================== 会员卡 ====================
+
+  async findAllCards(query: any) {
+    const page = +query.page || 1;
+    const pageSize = +query.pageSize || 20;
+    const where: any = {};
+    if (query.keyword) {
+      where.OR = [
+        { cardNo: { contains: query.keyword } },
+        { name: { contains: query.keyword } },
+      ];
+    }
+
+    const [list, total] = await Promise.all([
+      this.prisma.memberCard.findMany({
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        where,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.memberCard.count({ where }),
+    ]);
+    return new PaginatedResult(list, total, page, pageSize);
+  }
 }
