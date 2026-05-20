@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.turbo
+.cache
+.DS_Store
+Thumbs.db
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+# Docker
+docker-data/
+# Prisma
+packages/server/prisma/*.db
+# uni-app
+packages/mobile/unpackage/
+# Build outputs
+packages/web-admin/dist/
+packages/server/dist/
+*.pptx

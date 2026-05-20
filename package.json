@@ -1,0 +1,23 @@
+{
+  "name": "taizhou-auto-repair-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "泰州车行维修厂部综合管理系统 - 数字化管理 · 智能化运营 · 一体化服务",
+  "scripts": {
+    "dev:server": "pnpm --filter server dev",
+    "dev:web": "pnpm --filter web-admin dev",
+    "dev:mobile": "pnpm --filter mobile dev",
+    "build:server": "pnpm --filter server build",
+    "build:web": "pnpm --filter web-admin build",
+    "build:mobile": "pnpm --filter mobile build",
+    "db:generate": "pnpm --filter server db:generate",
+    "db:migrate": "pnpm --filter server db:migrate",
+    "db:seed": "pnpm --filter server db:seed",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "泰州车行维修厂"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/repair/reception",
+      "style": {
+        "navigationBarTitleText": "接车开单"
+      }
+    },
+    {
+      "path": "pages/repair/orders",
+      "style": {
+        "navigationBarTitleText": "工单列表"
+      }
+    },
+    {
+      "path": "pages/customer/list",
+      "style": {
+        "navigationBarTitleText": "客户列表"
+      }
+    },
+    {
+      "path": "pages/inventory/stock",
+      "style": {
+        "navigationBarTitleText": "库存查询"
+      }
+    },
+    {
+      "path": "pages/finance/cashier",
+      "style": {
+        "navigationBarTitleText": "收银台"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "泰州车行维修厂",
+    "navigationBarBackgroundColor": "#409EFF",
+    "backgroundColor": "#f5f5f5"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#409EFF",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/repair/orders",
+        "text": "工单",
+        "iconPath": "static/tab/repair.png",
+        "selectedIconPath": "static/tab/repair-active.png"
+      },
+      {
+        "pagePath": "pages/customer/list",
+        "text": "客户",
+        "iconPath": "static/tab/customer.png",
+        "selectedIconPath": "static/tab/customer-active.png"
+      },
+      {
+        "pagePath": "pages/inventory/stock",
+        "text": "库存",
+        "iconPath": "static/tab/stock.png",
+        "selectedIconPath": "static/tab/stock-active.png"
+      }
+    ]
+  },
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^u-(.*)": "uview-plus/components/u-$1/u-$1.vue"
+    }
+  }
+}
