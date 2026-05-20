@@ -52,6 +52,17 @@ export class InventoryController {
     return this.inventoryService.findStockRecords(query);
   }
 
+  // 采购管理（必须在 :id 之前）
+  @Get('purchase')
+  async findPurchaseOrders(@Query() query: PaginationDto & PurchaseSearchDto) {
+    return this.inventoryService.findPurchaseOrders(query);
+  }
+
+  @Get('purchase/:id')
+  async findPurchaseOrder(@Param('id') id: string) {
+    return this.inventoryService.findPurchaseOrder(+id);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.inventoryService.findOne(+id);
@@ -83,17 +94,6 @@ export class InventoryController {
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: UpdatePartDto) {
     return this.inventoryService.update(+id, body);
-  }
-
-  // 采购管理
-  @Get('purchase')
-  async findPurchaseOrders(@Query() query: PaginationDto & PurchaseSearchDto) {
-    return this.inventoryService.findPurchaseOrders(query);
-  }
-
-  @Get('purchase/:id')
-  async findPurchaseOrder(@Param('id') id: string) {
-    return this.inventoryService.findPurchaseOrder(+id);
   }
 
   @Post('purchase')

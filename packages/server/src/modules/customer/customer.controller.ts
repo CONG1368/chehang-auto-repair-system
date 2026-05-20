@@ -14,6 +14,12 @@ export class CustomerController {
     return this.customerService.findAll(query);
   }
 
+  // 到期提醒（必须在 :id 之前）
+  @Get('reminds')
+  async getReminds(@Query() query: RemindQueryDto) {
+    return this.customerService.getReminds(query.type);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.customerService.findOne(+id);
@@ -53,12 +59,6 @@ export class CustomerController {
   @Delete(':customerId/vehicles/:id')
   async removeVehicle(@Param('id') id: string) {
     return this.customerService.removeVehicle(+id);
-  }
-
-  // 到期提醒
-  @Get('reminds')
-  async getReminds(@Query() query: RemindQueryDto) {
-    return this.customerService.getReminds(query.type);
   }
 
   // 跟进记录
