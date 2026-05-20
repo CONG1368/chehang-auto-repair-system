@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Requ
 import { CustomerService } from './customer.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import { CreateCustomerDto, UpdateCustomerDto, CreateVehicleDto, CustomerSearchDto } from './dto/customer.dto';
+import { CreateCustomerDto, UpdateCustomerDto, CreateVehicleDto, CustomerSearchDto, RemindQueryDto } from './dto/customer.dto';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard)
@@ -53,6 +53,12 @@ export class CustomerController {
   @Delete(':customerId/vehicles/:id')
   async removeVehicle(@Param('id') id: string) {
     return this.customerService.removeVehicle(+id);
+  }
+
+  // 到期提醒
+  @Get('reminds')
+  async getReminds(@Query() query: RemindQueryDto) {
+    return this.customerService.getReminds(query.type);
   }
 
   // 跟进记录

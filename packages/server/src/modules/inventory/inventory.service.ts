@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WsGateway } from '../ws/ws.gateway';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
-import { CreatePartDto, UpdatePartDto, StockSearchDto, StockRecordDto } from './dto/inventory.dto';
+import { CreatePartDto, UpdatePartDto, StockSearchDto, StockRecordDto, CreatePurchaseDto, PurchaseSearchDto } from './dto/inventory.dto';
 
 @Injectable()
 export class InventoryService {
@@ -265,5 +265,80 @@ export class InventoryService {
 
   async getSuppliers() {
     return this.prisma.supplier.findMany({ where: { status: 1 } });
+  }
+
+  // ============ 采购管理 ============
+
+  async findPurchaseOrders(query: PaginationDto & PurchaseSearchDto) {
+    const where: any = {};
+    if (query.status) {
+      where.status = query.status;
+    }
+    const [list, total] = await Promise.all([
+      this.prisma.purchaseOrder.findMany({
+        skip: query.skip,
+        take: query.take,
+        where,
+        include: {
+          supplier: true,
+          items: { include: { part: { select: { id: true, name: true, code: true, spec: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.purchaseOrder.count({ where }),
+    ]);
+    return new PaginatedResult(list, total, query.page!, query.pageSize!);
+  }
+
+  async findPurchaseOrder(id: number) {
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        items: { include: { part: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('采购单不存在');
+    return order;
+  }
+
+  async createPurchaseOrder(body: CreatePurchaseDto, userId: number) {
+    if (!body.items || body.items.length === 0) {
+      throw new BadRequestException('采购明细不能为空');
+    }
+
+    // 生成采购单号 PO年月日-序号
+    const today = new Date();
+    const prefix = `PO${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    const todayOrder = await this.prisma.purchaseOrder.count({
+      where: { orderNo: { startsWith: prefix } },
+    });
+    const orderNo = `${prefix}-${String(todayOrder + 1).padStart(3, '0')}`;
+
+    let totalAmount = 0;
+    for (const item of body.items) {
+      totalAmount += item.quantity * item.unitPrice;
+    }
+
+    return this.prisma.purchaseOrder.create({
+      data: {
+        orderNo,
+        supplierId: body.supplierId,
+        totalAmount,
+        applicantId: userId,
+        items: {
+          create: body.items.map((item) => ({
+            partId: item.partId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount: item.quantity * item.unitPrice,
+          })),
+        },
+      },
+      include: {
+        supplier: true,
+        items: { include: { part: { select: { id: true, name: true, code: true, spec: true } } } },
+      },
+    });
   }
 }

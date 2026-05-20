@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -17,6 +18,8 @@ import {
   UpdatePartDto,
   StockSearchDto,
   StockRecordDto,
+  CreatePurchaseDto,
+  PurchaseSearchDto,
 } from './dto/inventory.dto';
 
 @Controller('inventory')
@@ -80,6 +83,22 @@ export class InventoryController {
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: UpdatePartDto) {
     return this.inventoryService.update(+id, body);
+  }
+
+  // 采购管理
+  @Get('purchase')
+  async findPurchaseOrders(@Query() query: PaginationDto & PurchaseSearchDto) {
+    return this.inventoryService.findPurchaseOrders(query);
+  }
+
+  @Get('purchase/:id')
+  async findPurchaseOrder(@Param('id') id: string) {
+    return this.inventoryService.findPurchaseOrder(+id);
+  }
+
+  @Post('purchase')
+  async createPurchaseOrder(@Body() body: CreatePurchaseDto, @Request() req: any) {
+    return this.inventoryService.createPurchaseOrder(body, req.user.id);
   }
 
   @Delete(':id')

@@ -195,8 +195,9 @@ model Part {
 
   category  PartCategory @relation(fields: [categoryId], references: [id])
   supplier  Supplier?    @relation(fields: [supplierId], references: [id])
-  stock     PartStock?
-  stockRecords StockRecord[]
+  stock            PartStock?
+  stockRecords     StockRecord[]
+  purchaseItems    PurchaseOrderItem[]
 
   @@map("part")
 }
@@ -256,6 +257,7 @@ model PurchaseOrderItem {
   amount         Decimal @db.Decimal(10, 2)
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  part           Part          @relation(fields: [partId], references: [id])
 
   @@map("purchase_order_item")
 }

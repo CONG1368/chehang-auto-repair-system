@@ -3,6 +3,16 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
 import { CreateCustomerDto, UpdateCustomerDto, CreateVehicleDto, CustomerSearchDto } from './dto/customer.dto';
 
+function diffDays(a: Date, b: Date): number {
+  return Math.ceil((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function addMonths(d: Date, months: number): Date {
+  const r = new Date(d);
+  r.setMonth(r.getMonth() + months);
+  return r;
+}
+
 @Injectable()
 export class CustomerService {
   constructor(private prisma: PrismaService) {}
@@ -106,5 +116,114 @@ export class CustomerService {
     return this.prisma.followRecord.create({
       data: { ...data, customerId, nextFollowAt: data.nextFollowAt ? new Date(data.nextFollowAt) : null },
     });
+  }
+
+  // 到期提醒
+  async getReminds(type?: string) {
+    const now = new Date();
+    const results: any[] = [];
+
+    function calcUrgency(days: number): string {
+      if (days <= 0) return '已超期';
+      if (days <= 7) return '即将到期';
+      if (days <= 30) return '近期到期';
+      return '正常';
+    }
+
+    // 保险到期提醒
+    if (!type || type === 'insurance') {
+      const vehicles = await this.prisma.customerVehicle.findMany({
+        where: { insuranceDue: { not: null } },
+        include: { customer: true },
+        orderBy: { insuranceDue: 'asc' },
+      });
+
+      for (const v of vehicles) {
+        const remainDays = diffDays(v.insuranceDue!, now);
+        results.push({
+          id: `${v.id}-insurance`,
+          type: 'insurance',
+          customerId: v.customerId,
+          customerName: v.customer.name,
+          customerPhone: v.customer.phone,
+          plateNumber: v.plateNumber,
+          dueDate: v.insuranceDue,
+          remainDays,
+          urgent: calcUrgency(remainDays),
+        });
+      }
+    }
+
+    // 年检到期提醒
+    if (!type || type === 'inspection') {
+      const vehicles = await this.prisma.customerVehicle.findMany({
+        where: { inspectionDue: { not: null } },
+        include: { customer: true },
+        orderBy: { inspectionDue: 'asc' },
+      });
+
+      for (const v of vehicles) {
+        const remainDays = diffDays(v.inspectionDue!, now);
+        results.push({
+          id: `${v.id}-inspection`,
+          type: 'inspection',
+          customerId: v.customerId,
+          customerName: v.customer.name,
+          customerPhone: v.customer.phone,
+          plateNumber: v.plateNumber,
+          dueDate: v.inspectionDue,
+          remainDays,
+          urgent: calcUrgency(remainDays),
+        });
+      }
+    }
+
+    // 保养到期提醒（基于最近一次维修 + 6个月/5000km）
+    if (!type || type === 'maintenance') {
+      const vehicles = await this.prisma.customerVehicle.findMany({
+        include: { customer: true },
+      });
+
+      // 批量获取每辆车的最新维修记录
+      const plateNumbers = vehicles.map((v) => v.plateNumber);
+      const lastRepairs = await this.prisma.repairOrder.groupBy({
+        by: ['plateNumber'],
+        where: {
+          plateNumber: { in: plateNumbers },
+          status: { in: ['completed', 'delivered'] },
+          actualCompleteTime: { not: null },
+        },
+        _max: { actualCompleteTime: true },
+      });
+      const repairMap = new Map(
+        lastRepairs.map((r) => [r.plateNumber, r._max.actualCompleteTime]),
+      );
+
+      for (const v of vehicles) {
+        const lastRepairDate = repairMap.get(v.plateNumber);
+        const baseDate = lastRepairDate || v.purchaseDate;
+        if (!baseDate) continue;
+
+        const suggestedDate = addMonths(new Date(baseDate), 6);
+        const remainDays = diffDays(suggestedDate, now);
+        results.push({
+          id: `${v.id}-maintenance`,
+          type: 'maintenance',
+          customerId: v.customerId,
+          customerName: v.customer.name,
+          customerPhone: v.customer.phone,
+          plateNumber: v.plateNumber,
+          lastMaintenanceDate: lastRepairDate || null,
+          suggestedDate: suggestedDate.toISOString(),
+          remainDays,
+          mileage: v.mileage,
+          suggestedMileage: v.mileage ? v.mileage + 5000 : null,
+          urgent: calcUrgency(remainDays),
+        });
+      }
+    }
+
+    results.sort((a, b) => a.remainDays - b.remainDays);
+    return results;
   }
 }

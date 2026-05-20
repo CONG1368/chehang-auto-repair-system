@@ -1,4 +1,5 @@
-import { IsString, IsInt, IsOptional, IsNumber, MaxLength, Min } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsNumber, MaxLength, Min, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreatePartDto {
   @IsString() @MaxLength(50) code: string;
@@ -35,4 +36,23 @@ export class StockRecordDto {
   @IsString() type: string;
   @IsInt() quantity: number;
   @IsOptional() @IsString() remark?: string;
+}
+
+export class PurchaseItemDto {
+  @IsInt() partId: number;
+  @IsInt() @Min(1) quantity: number;
+  @IsNumber() @Min(0) unitPrice: number;
+}
+
+export class CreatePurchaseDto {
+  @IsInt() supplierId: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PurchaseItemDto)
+  items: PurchaseItemDto[];
+}
+
+export class PurchaseSearchDto {
+  @IsOptional() @IsString() status?: string;
 }

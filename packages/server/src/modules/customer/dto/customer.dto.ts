@@ -107,3 +107,9 @@ export class CustomerSearchDto {
   @IsString()
   tag?: string;
 }
+
+export class RemindQueryDto {
+  @IsOptional()
+  @IsString()
+  type?: string; // maintenance | insurance | inspection
+}
