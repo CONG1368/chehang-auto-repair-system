@@ -18,6 +18,9 @@ docker-data/
 packages/server/prisma/*.db
 # uni-app
 packages/mobile/unpackage/
+# Playwright
+test-results/
+
 # Build outputs
 packages/web-admin/dist/
 packages/server/dist/
