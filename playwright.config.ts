@@ -11,6 +11,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  webServer: [
+    {
+      command: 'pnpm dev:server',
+      port: 3000,
+      timeout: 30_000,
+      reuseExistingServer: true,
+    },
+    {
+      command: 'pnpm dev:web',
+      port: 5173,
+      timeout: 30_000,
+      reuseExistingServer: true,
+    },
+  ],
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],

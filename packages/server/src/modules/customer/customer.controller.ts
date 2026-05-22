@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateCustomerDto, UpdateCustomerDto, CreateVehicleDto, CustomerSearchDto, RemindQueryDto } from './dto/customer.dto';
 
 @Controller('customers')
@@ -10,7 +9,7 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get()
-  async findAll(@Query() query: PaginationDto & CustomerSearchDto) {
+  async findAll(@Query() query: CustomerSearchDto) {
     return this.customerService.findAll(query);
   }
 
@@ -52,13 +51,13 @@ export class CustomerController {
   }
 
   @Put(':customerId/vehicles/:id')
-  async updateVehicle(@Param('id') id: string, @Body() dto: Partial<CreateVehicleDto>) {
-    return this.customerService.updateVehicle(+id, dto);
+  async updateVehicle(@Param('customerId') customerId: string, @Param('id') id: string, @Body() dto: Partial<CreateVehicleDto>) {
+    return this.customerService.updateVehicle(+customerId, +id, dto);
   }
 
   @Delete(':customerId/vehicles/:id')
-  async removeVehicle(@Param('id') id: string) {
-    return this.customerService.removeVehicle(+id);
+  async removeVehicle(@Param('customerId') customerId: string, @Param('id') id: string) {
+    return this.customerService.removeVehicle(+customerId, +id);
   }
 
   // 跟进记录

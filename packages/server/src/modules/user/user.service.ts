@@ -65,16 +65,33 @@ export class UserService {
     return { message: '删除成功' };
   }
 
+  /** 查询所有维修技师（role.code = 'technician'） */
+  async findTechnicians() {
+    const users = await this.prisma.sysUser.findMany({
+      where: { role: { code: 'technician' } },
+      include: { role: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return users.map(({ password, ...rest }) => rest);
+  }
+
   // ========== 角色管理 ==========
 
   async findAllRoles() {
-    return this.prisma.sysRole.findMany({ orderBy: { createdAt: 'asc' } });
+    const roles = await this.prisma.sysRole.findMany({ orderBy: { createdAt: 'asc' } });
+    return roles.map((role) => ({
+      ...role,
+      permissions: typeof role.permissions === 'string' ? JSON.parse(role.permissions as string) : role.permissions,
+    }));
   }
 
   async findRoleOne(id: number) {
     const role = await this.prisma.sysRole.findUnique({ where: { id } });
     if (!role) throw new NotFoundException('角色不存在');
-    return role;
+    return {
+      ...role,
+      permissions: typeof role.permissions === 'string' ? JSON.parse(role.permissions as string) : role.permissions,
+    };
   }
 
   async createRole(dto: CreateRoleDto) {
@@ -85,7 +102,7 @@ export class UserService {
         name: dto.name,
         code: dto.code,
         description: dto.description,
-        permissions: dto.permissions ? JSON.stringify(dto.permissions) : undefined,
+        permissions: dto.permissions ?? undefined,
         status: dto.status ?? 1,
       },
     });
@@ -95,7 +112,7 @@ export class UserService {
     await this.findRoleOne(id);
     const data: any = { ...dto };
     if (dto.permissions) {
-      data.permissions = JSON.stringify(dto.permissions);
+      data.permissions = dto.permissions;
     }
     return this.prisma.sysRole.update({ where: { id }, data });
   }

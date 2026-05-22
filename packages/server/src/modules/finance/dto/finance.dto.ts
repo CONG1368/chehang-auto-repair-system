@@ -40,6 +40,30 @@ export class CreatePaymentDto {
   remark?: string;
 }
 
+export class UpdatePaymentDto {
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  discount?: number;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
 export class CreateReceivableDto {
   @IsInt()
   @Type(() => Number)
@@ -74,6 +98,29 @@ export class CreateExpenseDto {
   @IsInt()
   @Type(() => Number)
   operatorId: number;
+}
+
+export class UpdateExpenseDto {
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  date?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
 }
 
 export class PaymentQueryDto {
@@ -144,6 +191,52 @@ export class ReceivableQueryDto {
   }
 }
 
+export class UpdateReceivableDto {
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceNo?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class UpdatePayableDto {
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceNo?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
 export class ExpenseQueryDto {
   @IsOptional()
   @IsString()
@@ -186,4 +279,65 @@ export class ProfitSummaryQueryDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+}
+
+// ==================== 应付账款 DTO ====================
+
+export class CreatePayableDto {
+  @IsInt()
+  @Type(() => Number)
+  supplierId: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  amount: number;
+
+  @IsOptional()
+  @IsString()
+  dueDate?: string;
+
+  @IsString()
+  source: string;
+
+  @IsString()
+  sourceNo: string;
+}
+
+export class PayableQueryDto {
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  supplierId?: number;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number = 10;
+
+  get skip(): number {
+    return (this.page! - 1) * this.pageSize!;
+  }
+
+  get take(): number {
+    return this.pageSize!;
+  }
 }

@@ -21,6 +21,7 @@ import {
   CreateSalesOrderDto,
   UpdateSalesOrderDto,
   DeliveryDto,
+  CreateLeadFollowRecordDto,
 } from './dto/sales.dto';
 
 @Controller('sales')
@@ -62,6 +63,21 @@ export class SalesController {
     return this.salesService.findAllLeads(query);
   }
 
+  // 线索跟进记录（显式路由必须在 :id 之前）
+  @Get('leads/:leadId/follows')
+  async getLeadFollowRecords(@Param('leadId') leadId: string) {
+    return this.salesService.getLeadFollowRecords(+leadId);
+  }
+
+  @Post('leads/:leadId/follows')
+  async addLeadFollowRecord(
+    @Param('leadId') leadId: string,
+    @Body() dto: CreateLeadFollowRecordDto & { status?: string },
+    @Request() req: any,
+  ) {
+    return this.salesService.addLeadFollowRecord(+leadId, req.user.id, dto);
+  }
+
   @Get('leads/:id')
   async findLeadOne(@Param('id') id: string) {
     return this.salesService.findLeadOne(+id);
@@ -69,16 +85,19 @@ export class SalesController {
 
   @Post('leads')
   async createLead(@Body() dto: CreateLeadDto, @Request() req: any) {
-    // 如果未指定 userId，使用当前登录用户
-    if (!dto.userId) {
-      dto.userId = req.user?.id;
-    }
+    // 始终从 token 获取 userId，防止越权创建
+    dto.userId = req.user?.id;
     return this.salesService.createLead(dto);
   }
 
   @Put('leads/:id')
-  async updateLead(@Param('id') id: string, @Body() dto: UpdateLeadDto) {
-    return this.salesService.updateLead(+id, dto);
+  async updateLead(@Param('id') id: string, @Body() dto: UpdateLeadDto, @Request() req: any) {
+    return this.salesService.updateLead(+id, dto, req.user?.id);
+  }
+
+  @Delete('leads/:id')
+  async removeLead(@Param('id') id: string) {
+    return this.salesService.removeLead(+id);
   }
 
   // ==================== 销售订单 ====================
@@ -94,13 +113,20 @@ export class SalesController {
   }
 
   @Post('orders')
-  async createOrder(@Body() dto: CreateSalesOrderDto) {
+  async createOrder(@Body() dto: CreateSalesOrderDto, @Request() req: any) {
+    // 始终从 token 获取 salesId，防止越权创建
+    dto.salesId = req.user?.id;
     return this.salesService.createOrder(dto);
   }
 
   @Put('orders/:id')
   async updateOrder(@Param('id') id: string, @Body() dto: UpdateSalesOrderDto) {
     return this.salesService.updateOrder(+id, dto);
+  }
+
+  @Delete('orders/:id')
+  async removeOrder(@Param('id') id: string) {
+    return this.salesService.removeOrder(+id);
   }
 
   @Put('orders/:id/delivery')

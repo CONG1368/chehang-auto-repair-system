@@ -29,6 +29,9 @@
           搜索
         </el-button>
         <el-button style="margin-left: 12px" @click="handleReset">重置</el-button>
+        <el-button style="margin-left: 12px" @click="handleExport">
+          <el-icon style="margin-right: 4px"><Download /></el-icon>导出Excel
+        </el-button>
         <el-button type="success" style="margin-left: auto" @click="handleAdd">
           新增服务
         </el-button>
@@ -41,6 +44,7 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleDetail"
       >
         <el-table-column prop="name" label="服务名称" min-width="150" />
         <el-table-column label="分类" width="100" align="center">
@@ -72,8 +76,11 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
+            <el-button link type="info" size="small" @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               编辑
             </el-button>
@@ -97,6 +104,35 @@
         />
       </div>
     </el-card>
+
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="服务详情"
+      size="480px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="detailRow">
+        <el-descriptions :column="1" border size="default">
+          <el-descriptions-item label="服务名称">{{ detailRow.name }}</el-descriptions-item>
+          <el-descriptions-item label="分类">
+            <el-tag :type="categoryTagType(detailRow.category)" size="small">
+              {{ detailRow.category }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="价格">¥{{ detailRow.price }}</el-descriptions-item>
+          <el-descriptions-item label="时长">{{ detailRow.duration }}分钟</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="detailRow.status === 1 ? 'success' : 'info'" size="small">
+              {{ detailRow.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog
@@ -157,8 +193,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
 
 // ==================== 类型定义 ====================
 interface Service {
@@ -212,6 +250,15 @@ const isEdit = ref(false)
 const currentId = ref<number | null>(null)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
+
+// ==================== 详情抽屉 ====================
+const drawerVisible = ref(false)
+const detailRow = ref<Service | null>(null)
+
+function handleDetail(row: Service) {
+  detailRow.value = row
+  drawerVisible.value = true
+}
 
 const initForm = (): ServiceForm => ({
   name: '',
@@ -282,6 +329,13 @@ function handleEdit(row: Service) {
   form.price = row.price
   form.duration = row.duration
   dialogVisible.value = true
+}
+
+/** 导出 Excel */
+function handleExport() {
+  downloadFile('/api/export/excel?module=beauty', '美容服务项目.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
 }
 
 /** 弹窗关闭后清理验证 */

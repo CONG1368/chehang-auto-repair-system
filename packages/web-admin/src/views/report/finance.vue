@@ -8,6 +8,9 @@
           <el-radio-button :value="30">近30天</el-radio-button>
           <el-radio-button :value="90">近90天</el-radio-button>
         </el-radio-group>
+        <el-button type="success" size="small" style="margin-left: 12px" @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button size="small" @click="handleExportPdf" style="margin-left: 8px">📄 导出PDF</el-button>
+        <el-button type="warning" size="small" style="margin-left: 8px" @click="handlePrint">🖨️ 打印</el-button>
       </div>
     </div>
 
@@ -71,9 +74,45 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { ElMessage } from 'element-plus';
 import VChart from 'vue-echarts';
 import 'echarts';
 import request from '@/api/request';
+import { downloadFile } from '@/utils/download';
+import { exportTableToPdf } from '@/utils/export-pdf';
+
+const handleExportExcel = () => {
+  downloadFile('/api/export/excel?module=report', '财务报表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+const handlePrint = () => {
+  window.print()
+}
+
+const handleExportPdf = () => {
+  // 导出收入趋势 + 费用构成
+  const revenueData = revenueTrend.value.map((d: any) => ({
+    日期: d.date,
+    收入: `¥${formatMoney(d.amount)}`,
+  }))
+  const expenseData = expenseByCategory.value.map((e: any) => ({
+    类别: e.category,
+    费用: `¥${formatMoney(e.total)}`,
+  }))
+
+  // 合并为一张报表
+  exportTableToPdf(
+    `财务分析报表（近${days.value}天）`,
+    [
+      { header: '日期', dataKey: '日期' },
+      { header: '收入', dataKey: '收入' },
+    ],
+    revenueData,
+    '财务报表',
+  )
+}
 
 const days = ref(30);
 
@@ -162,22 +201,34 @@ const expenseOption = computed(() => ({
 const loadData = async () => {
   try {
     const params = { days: days.value };
-    const [trend, ratio] = await Promise.all([
+
+    // 计算费用汇总查询的日期范围（最近N天）
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days.value + 1);
+    const dateParams = {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+    };
+
+    const [trend, ratio, expenseSummary] = await Promise.all([
       request.get('/reports/revenue-trend', { params }),
       request.get('/reports/business-ratio'),
+      request.get('/finance/expenses/summary', { params: dateParams }),
     ]);
     revenueTrend.value = trend as any;
     businessRatio.value = ratio as any;
 
-    // 模拟费用数据（ExpenseRecord 表暂无可读接口，后续可接入）
-    // 此处展示模拟结构
-    expenseByCategory.value = [
-      { category: '配件采购', total: 0 },
-      { category: '工资支出', total: 0 },
-      { category: '水电房租', total: 0 },
-      { category: '设备维护', total: 0 },
-      { category: '其他', total: 0 },
-    ];
+    // 将后端返回的 { "配件采购": 123, ... } 转换为图表所需的 [{ category, total }, ...] 格式
+    const summary = expenseSummary as any;
+    if (summary && summary.byCategory) {
+      expenseByCategory.value = Object.entries(summary.byCategory).map(([category, total]) => ({
+        category,
+        total: Number(total),
+      }));
+    } else {
+      expenseByCategory.value = [];
+    }
   } catch (err) {
     console.error('加载财务分析失败:', err);
   }
@@ -200,5 +251,10 @@ onMounted(() => loadData());
   font-size: 18px;
   color: #303133;
   margin: 0;
+}
+
+@media print {
+  :deep(.el-button) { display: none; }
+  :deep(.el-pagination) { display: none; }
 }
 </style>

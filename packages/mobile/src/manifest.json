@@ -1,7 +1,7 @@
 {
-  "name": "泰州车行维修厂",
-  "appid": "__UNI__TAIZHOU_AUTO",
-  "description": "泰州车行维修厂部综合管理系统",
+  "name": "车行",
+  "appid": "__UNI__CHEHANG_AUTO",
+  "description": "车行综合管理系统",
   "versionName": "1.0.0",
   "versionCode": "100",
   "transformPx": false,

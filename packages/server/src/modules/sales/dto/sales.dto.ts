@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsInt,
   IsBoolean,
+  IsArray,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -56,6 +57,10 @@ export class CreateVehicleDto {
   @IsOptional()
   @IsString()
   stockStatus?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: string[];
 }
 
 export class UpdateVehicleDto {
@@ -108,6 +113,10 @@ export class UpdateVehicleDto {
   @IsOptional()
   @IsString()
   stockStatus?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: string[];
 }
 
 // ==================== 销售线索 DTO ====================
@@ -118,9 +127,10 @@ export class CreateLeadDto {
   @IsInt()
   customerId?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  userId: number;
+  userId?: number;
 
   @IsOptional()
   @IsString()
@@ -132,7 +142,15 @@ export class CreateLeadDto {
 
   @IsOptional()
   @IsString()
+  intentLevel?: string;
+
+  @IsOptional()
+  @IsString()
   intentModel?: string;
+
+  @IsOptional()
+  @IsString()
+  intendedVehicle?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -160,7 +178,15 @@ export class UpdateLeadDto {
 
   @IsOptional()
   @IsString()
+  intentLevel?: string;
+
+  @IsOptional()
+  @IsString()
   intentModel?: string;
+
+  @IsOptional()
+  @IsString()
+  intendedVehicle?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -242,9 +268,14 @@ export class CreateSalesOrderDto {
   @IsString()
   paymentMethod?: string;
 
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  salesId: number;
+  salesId?: number;
 }
 
 export class UpdateSalesOrderDto {
@@ -316,20 +347,31 @@ export class UpdateSalesOrderDto {
   salesId?: number;
 }
 
+// ==================== 线索跟进记录 DTO ====================
+
+export class CreateLeadFollowRecordDto {
+  @IsString()
+  type: string;
+
+  @IsString()
+  content: string;
+
+  @IsOptional()
+  @IsDateString()
+  nextFollowAt?: string;
+}
+
 export class DeliveryDto {
   @IsOptional()
-  @IsBoolean()
-  insuranceDone?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  licenseDone?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  accessoriesInstalled?: boolean;
+  @IsArray()
+  @IsString({ each: true })
+  checklist?: string[];
 
   @IsOptional()
   @IsDateString()
   deliveryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
 }

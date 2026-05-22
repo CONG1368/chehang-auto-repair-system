@@ -2,6 +2,11 @@
   <div class="page-container">
     <div class="page-header">
       <h2>销售分析</h2>
+      <div class="header-actions">
+        <el-button type="success" @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf">📄 导出PDF</el-button>
+        <el-button type="warning" @click="handlePrint">🖨️ 打印</el-button>
+      </div>
     </div>
 
     <!-- 汇总卡片 -->
@@ -34,9 +39,34 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { ElMessage } from 'element-plus';
 import VChart from 'vue-echarts';
 import 'echarts';
 import request from '@/api/request';
+import { downloadFile } from '@/utils/download';
+import { exportTableToPdf } from '@/utils/export-pdf';
+
+const handleExportExcel = () => {
+  downloadFile('/api/export/excel?module=report', '销售报表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+const handlePrint = () => {
+  window.print()
+}
+
+const handleExportPdf = () => {
+  exportTableToPdf(
+    '销售统计报表',
+    [
+      { header: '品牌', dataKey: 'brand' },
+      { header: '销量', dataKey: '_count' },
+    ],
+    vehicleStats.value,
+    '销售报表',
+  )
+}
 
 const vehicleStats = ref<{ brand: string; _count: number }[]>([]);
 const totalSold = computed(() => vehicleStats.value.reduce((s, v) => s + v._count, 0));
@@ -97,10 +127,24 @@ onMounted(async () => {
   padding: 0;
 }
 .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 20px;
 }
 .page-header h2 {
   font-size: 18px;
   color: #303133;
+  margin: 0;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media print {
+  :deep(.el-button) { display: none; }
+  :deep(.el-pagination) { display: none; }
 }
 </style>

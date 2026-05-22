@@ -7,12 +7,27 @@ export class RedisService extends Redis implements OnModuleInit, OnModuleDestroy
     super({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
-      retryStrategy: (times) => Math.min(times * 50, 2000),
+      password: process.env.REDIS_PASSWORD || undefined,
+      maxRetriesPerRequest: 3,
+      enableOfflineQueue: false,
+      lazyConnect: true,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error(`[Redis] 连接失败，已重试 ${times} 次，停止重连`);
+          return null;
+        }
+        return Math.min(times * 50, 2000);
+      },
     });
   }
 
   async onModuleInit() {
-    console.log('✅ Redis 连接成功');
+    try {
+      await this.connect();
+      console.log('✅ Redis 连接成功');
+    } catch (err) {
+      console.error('❌ Redis 连接失败:', (err as Error).message);
+    }
   }
 
   async onModuleDestroy() {

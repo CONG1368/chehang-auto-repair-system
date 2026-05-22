@@ -41,6 +41,8 @@
           @change="handleSearch"
         />
         <el-button type="primary" @click="handleSearch">搜索</el-button>
+        <el-button type="success" plain @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf">📄 导出PDF</el-button>
         <el-button @click="handleReset">重置</el-button>
       </div>
     </el-card>
@@ -52,7 +54,8 @@
         :data="tableData"
         border
         stripe
-        style="width: 100%"
+        style="width: 100%; cursor: pointer"
+        @row-click="handleView"
       >
         <el-table-column prop="orderNo" label="工单号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="plateNumber" label="车牌号" min-width="110" />
@@ -60,17 +63,17 @@
         <el-table-column prop="vehicleModel" label="车型" min-width="140" show-overflow-tooltip />
         <el-table-column label="维修项目数" width="100" align="center">
           <template #default="{ row }">
-            {{ row.repairItemCount ?? 0 }}
+            {{ row._count?.items ?? 0 }}
           </template>
         </el-table-column>
         <el-table-column label="工时费(¥)" width="110" align="right">
           <template #default="{ row }">
-            <span class="amount">{{ formatMoney(row.laborFee) }}</span>
+            <span class="amount">{{ formatMoney(row.totalLaborFee) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="配件费(¥)" width="110" align="right">
           <template #default="{ row }">
-            <span class="amount">{{ formatMoney(row.partsFee) }}</span>
+            <span class="amount">{{ formatMoney(row.totalPartFee) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="总金额(¥)" width="120" align="right">
@@ -85,9 +88,13 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="serviceAdvisor" label="服务顾问" min-width="100" />
-        <el-table-column prop="createTime" label="创建时间" min-width="160" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="服务顾问" min-width="100">
+          <template #default="{ row }">
+            {{ row.advisor?.realName || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="创建时间" min-width="160" />
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.status === 'pending'"
@@ -128,6 +135,9 @@
             <el-button type="primary" link size="small" @click="handleView(row)">
               {{ row.status === 'assigned' || row.status === 'repairing' ? '查看详情' : '查看' }}
             </el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -165,18 +175,17 @@
                   {{ getStatusLabel(detail.status) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="客户姓名">{{ detail.customerName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="联系电话">{{ detail.customerPhone || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="客户姓名">{{ detail.customer?.name || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="联系电话">{{ detail.customer?.phone || '-' }}</el-descriptions-item>
               <el-descriptions-item label="车牌号">{{ detail.plateNumber || '-' }}</el-descriptions-item>
               <el-descriptions-item label="车型">{{ detail.vehicleModel || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="车架号">{{ detail.vehicleVin || '-' }}</el-descriptions-item>
               <el-descriptions-item label="行驶里程">
                 {{ detail.mileage ? detail.mileage.toLocaleString() + ' 公里' : '-' }}
               </el-descriptions-item>
-              <el-descriptions-item label="服务顾问">{{ detail.serviceAdvisor || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="创建时间">{{ detail.createTime || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="服务顾问">{{ detail.advisor?.realName || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ detail.createdAt || '-' }}</el-descriptions-item>
               <el-descriptions-item label="故障描述" :span="2">
-                {{ detail.description || '-' }}
+                {{ detail.faultDesc || '-' }}
               </el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
@@ -184,16 +193,16 @@
           <!-- 维修项目列表 -->
           <el-tab-pane label="维修项目" name="items">
             <el-table
-              v-if="detail.repairItems && detail.repairItems.length > 0"
-              :data="detail.repairItems"
+              v-if="detail.items && detail.items.length > 0"
+              :data="detail.items"
               border
               stripe
               style="width: 100%"
             >
               <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
-              <el-table-column prop="description" label="项目描述" min-width="180" show-overflow-tooltip>
+              <el-table-column label="类型" width="90" align="center">
                 <template #default="{ row: item }">
-                  {{ item.description || '-' }}
+                  <el-tag size="small">{{ item.type === 'labor' ? '工时' : item.type === 'part' ? '配件' : item.type || '-' }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="工时费(¥)" width="110" align="right">
@@ -201,9 +210,14 @@
                   {{ formatMoney(item.laborFee) }}
                 </template>
               </el-table-column>
-              <el-table-column prop="technician" label="维修技师" min-width="100">
+              <el-table-column label="配件费(¥)" width="110" align="right">
                 <template #default="{ row: item }">
-                  {{ item.technician || '-' }}
+                  {{ formatMoney(item.partFee) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="小计(¥)" width="110" align="right">
+                <template #default="{ row: item }">
+                  {{ formatMoney(item.amount) }}
                 </template>
               </el-table-column>
               <el-table-column label="状态" width="90" align="center">
@@ -223,13 +237,17 @@
               <el-timeline-item
                 v-for="item in detail.dispatchRecords"
                 :key="item.id"
-                :timestamp="item.dispatchTime"
+                :timestamp="item.createdAt"
                 placement="top"
               >
                 <el-card shadow="hover">
                   <p class="record-line">
                     <span class="record-label">维修技师：</span>
-                    <span>{{ item.technician }}</span>
+                    <span>{{ item.technician?.realName || '-' }}</span>
+                  </p>
+                  <p class="record-line">
+                    <span class="record-label">标准工时：</span>
+                    <span>{{ item.standardHours ? item.standardHours + 'h' : '-' }}</span>
                   </p>
                   <p class="record-line">
                     <span class="record-label">备注：</span>
@@ -243,31 +261,23 @@
 
           <!-- 质检记录 -->
           <el-tab-pane label="质检记录" name="quality">
-            <el-timeline v-if="detail.qualityCheckRecords && detail.qualityCheckRecords.length > 0">
-              <el-timeline-item
-                v-for="item in detail.qualityCheckRecords"
-                :key="item.id"
-                :timestamp="item.checkTime"
-                placement="top"
-              >
-                <el-card shadow="hover">
-                  <p class="record-line">
-                    <span class="record-label">质检员：</span>
-                    <span>{{ item.checker }}</span>
-                  </p>
-                  <p class="record-line">
-                    <span class="record-label">结果：</span>
-                    <el-tag :type="item.result === 'pass' ? 'success' : 'danger'" size="small">
-                      {{ item.result === 'pass' ? '合格' : '不合格' }}
+            <template v-if="detail.qualityCheck">
+              <el-card shadow="hover">
+                <el-descriptions :column="2" border size="small">
+                  <el-descriptions-item label="质检时间">{{ detail.qualityCheck.createdAt || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="结果">
+                    <el-tag :type="detail.qualityCheck.isPassed ? 'success' : 'danger'" size="small">
+                      {{ detail.qualityCheck.isPassed ? '合格' : '不合格' }}
                     </el-tag>
-                  </p>
-                  <p class="record-line">
-                    <span class="record-label">备注：</span>
-                    <span>{{ item.remark || '-' }}</span>
-                  </p>
-                </el-card>
-              </el-timeline-item>
-            </el-timeline>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="路试">{{ detail.qualityCheck.roadTest || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="备注">{{ detail.qualityCheck.remark || '-' }}</el-descriptions-item>
+                  <el-descriptions-item v-if="detail.qualityCheck.itemsChecked && detail.qualityCheck.itemsChecked.length > 0" label="检查项" :span="2">
+                    <el-tag v-for="(ci, idx) in detail.qualityCheck.itemsChecked" :key="idx" size="small" style="margin:2px 4px 2px 0">{{ ci }}</el-tag>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </el-card>
+            </template>
             <el-empty v-else description="暂无质检记录" />
           </el-tab-pane>
 
@@ -275,46 +285,63 @@
           <el-tab-pane label="费用明细" name="cost">
             <el-descriptions :column="1" border class="cost-summary">
               <el-descriptions-item label="工时费合计">
-                <span class="amount">¥{{ formatMoney(detail.laborFee) }}</span>
+                <span class="amount">¥{{ formatMoney(detail.totalLaborFee) }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="配件费合计">
-                <span class="amount">¥{{ formatMoney(detail.partsFee) }}</span>
+                <span class="amount">¥{{ formatMoney(detail.totalPartFee) }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="总金额">
-                <span class="amount-total" style="font-size: 16px">¥{{ formatMoney(detail.totalAmount) }}</span>
+              <el-descriptions-item label="优惠金额">
+                <span class="amount">¥{{ formatMoney(detail.discount) }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="最终金额">
+                <span class="amount-total" style="font-size: 16px">¥{{ formatMoney(detail.finalAmount) }}</span>
               </el-descriptions-item>
             </el-descriptions>
-
-            <h4 class="sub-title">配件明细</h4>
-            <el-table
-              v-if="detail.partsList && detail.partsList.length > 0"
-              :data="detail.partsList"
-              border
-              stripe
-              style="width: 100%"
-            >
-              <el-table-column prop="name" label="配件名称" min-width="150" show-overflow-tooltip />
-              <el-table-column label="数量" width="80" align="center">
-                <template #default="{ row: part }">
-                  {{ part.quantity ?? 0 }}
-                </template>
-              </el-table-column>
-              <el-table-column label="单价(¥)" width="110" align="right">
-                <template #default="{ row: part }">
-                  {{ formatMoney(part.unitPrice) }}
-                </template>
-              </el-table-column>
-              <el-table-column label="小计(¥)" width="120" align="right">
-                <template #default="{ row: part }">
-                  <span class="amount">{{ formatMoney(part.totalPrice) }}</span>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-else description="暂无配件明细" />
           </el-tab-pane>
         </el-tabs>
+        <el-button type="primary" @click="handlePrintOrder">🖨️ 打印施工单</el-button>
       </div>
     </el-drawer>
+
+    <!-- 编辑工单弹窗 -->
+    <el-dialog
+      v-model="editDialogVisible"
+      title="编辑工单"
+      width="560px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form
+        ref="editFormRef"
+        :model="editForm"
+        :rules="editFormRules"
+        label-width="90px"
+      >
+        <el-form-item label="工单号"><span>{{ editTarget?.orderNo }}</span></el-form-item>
+        <el-form-item label="车牌号" prop="plateNumber">
+          <el-input v-model="editForm.plateNumber" placeholder="请输入车牌号" />
+        </el-form-item>
+        <el-form-item label="车型" prop="vehicleModel">
+          <el-input v-model="editForm.vehicleModel" placeholder="请输入车型" />
+        </el-form-item>
+        <el-form-item label="里程(km)" prop="mileage">
+          <el-input-number v-model="editForm.mileage" :min="0" controls-position="right" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="故障描述" prop="faultDesc">
+          <el-input v-model="editForm.faultDesc" type="textarea" :rows="3" placeholder="请输入故障描述" />
+        </el-form-item>
+        <el-form-item label="优惠(¥)" prop="discount">
+          <el-input-number v-model="editForm.discount" :min="0" :precision="2" controls-position="right" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="最终金额">
+          <span class="amount-total" style="font-size:16px">¥{{ formatMoney(editComputedAmount) }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 派工弹窗 -->
     <el-dialog
@@ -407,10 +434,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h, createApp } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { printHtml } from '@/utils/print'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
+import RepairOrderPrint from '@/components/PrintTemplate/RepairOrderPrint.vue'
+
+/** HTML 实体转义，防止 XSS */
+function escapeHtml(str: any): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** 递归深度转义对象中所有字符串值（防御纵深，配合 Vue {{ }} 模板转义） */
+function deepEscape(data: any): any {
+  if (typeof data === 'string') return escapeHtml(data)
+  if (Array.isArray(data)) return data.map(deepEscape)
+  if (data !== null && typeof data === 'object') {
+    const result: Record<string, any> = {}
+    for (const key of Object.keys(data)) {
+      result[key] = deepEscape(data[key])
+    }
+    return result
+  }
+  return data
+}
 
 // ==================== 类型定义 ====================
 
@@ -420,67 +475,62 @@ interface RepairOrder {
   plateNumber: string
   customerName: string
   vehicleModel: string
-  repairItemCount: number
-  laborFee: number
-  partsFee: number
+  mileage?: number
+  faultDesc?: string
+  discount?: number
+  _count?: { items: number }
+  totalLaborFee: number
+  totalPartFee: number
   totalAmount: number
   status: string
-  serviceAdvisor: string
-  createTime: string
+  advisor?: { realName: string }
+  createdAt: string
 }
 
 interface RepairItem {
   id: number
   name: string
-  description: string
+  type: string
   laborFee: number
+  partFee: number
+  amount: number
   status: string
-  technician: string
 }
 
 interface DispatchRecord {
   id: number
-  technician: string
-  dispatchTime: string
-  remark: string
-}
-
-interface QualityCheckRecord {
-  id: number
-  checker: string
-  checkTime: string
-  result: string
-  remark: string
-}
-
-interface PartItem {
-  id: number
-  name: string
-  quantity: number
-  unitPrice: number
-  totalPrice: number
+  technician?: { realName: string }
+  standardHours?: number
+  createdAt: string
+  remark?: string
 }
 
 interface RepairOrderDetail {
   id: number
   orderNo: string
-  customerName: string
-  customerPhone: string
+  customer?: { name: string; phone: string }
   plateNumber: string
   vehicleModel: string
-  vehicleVin: string
   mileage: number
-  serviceAdvisor: string
+  advisor?: { realName: string }
   status: string
-  createTime: string
-  description: string
-  repairItems: RepairItem[]
+  createdAt: string
+  faultDesc: string
+  items: RepairItem[]
   dispatchRecords: DispatchRecord[]
-  qualityCheckRecords: QualityCheckRecord[]
-  laborFee: number
-  partsFee: number
+  qualityCheck?: {
+    id: number
+    isPassed: boolean
+    roadTest?: string
+    itemsChecked?: string[]
+    remark?: string
+    createdAt: string
+  }
+  totalLaborFee: number
+  totalPartFee: number
   totalAmount: number
-  partsList: PartItem[]
+  discount: number
+  finalAmount: number
 }
 
 interface Technician {
@@ -578,10 +628,74 @@ const handleDrawerClosed = () => {
 
 // ==================== 编辑 ====================
 
+const editDialogVisible = ref(false)
+const editLoading = ref(false)
+const editTarget = ref<RepairOrder | null>(null)
+const editFormRef = ref<FormInstance>()
+
+interface EditForm {
+  plateNumber: string
+  vehicleModel: string
+  mileage: number | null
+  faultDesc: string
+  discount: number
+}
+
+const editForm = reactive<EditForm>({
+  plateNumber: '',
+  vehicleModel: '',
+  mileage: null,
+  faultDesc: '',
+  discount: 0,
+})
+
+const editFormRules: FormRules = {
+  plateNumber: [{ required: true, message: '请输入车牌号', trigger: 'blur' }],
+}
+
+const editComputedAmount = computed(() => {
+  if (!editTarget.value) return 0
+  const total = Number(editTarget.value.totalAmount) || 0
+  return Math.max(0, total - editForm.discount)
+})
+
 const handleEdit = (row: RepairOrder) => {
-  // 跳转到编辑页面或打开编辑弹窗
-  ElMessage.info('编辑功能 — 可通过接车开单页面修改工单')
-  // 可在此处扩展为编辑弹窗或路由跳转
+  editTarget.value = row
+  editForm.plateNumber = row.plateNumber || ''
+  editForm.vehicleModel = row.vehicleModel || ''
+  editForm.mileage = (row as any).mileage ?? null
+  editForm.faultDesc = row.faultDesc || ''
+  editForm.discount = Number(row.discount) || 0
+  editDialogVisible.value = true
+}
+
+const handleEditSubmit = async () => {
+  const valid = await editFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  editLoading.value = true
+  try {
+    await request.put(`/repair/${editTarget.value!.id}`, {
+      plateNumber: editForm.plateNumber,
+      vehicleModel: editForm.vehicleModel,
+      mileage: editForm.mileage,
+      faultDesc: editForm.faultDesc,
+      discount: editForm.discount,
+      finalAmount: editComputedAmount.value,
+    })
+    ElMessage.success('工单更新成功')
+    editDialogVisible.value = false
+    fetchList()
+    // 如果详情抽屉打开着，也刷新详情
+    if (detail.value && detail.value.id === editTarget.value!.id) {
+      const res = await request.get<any, RepairOrderDetail>(`/repair/${editTarget.value!.id}`)
+      detail.value = res
+    }
+  } catch {
+    // 错误已在拦截器中处理
+  } finally {
+    editLoading.value = false
+  }
 }
 
 // ==================== 派工 ====================
@@ -603,7 +717,7 @@ const dispatchFormRules: FormRules = {
 
 const fetchTechnicians = async () => {
   try {
-    const res = await request.get<any, Technician[]>('/technicians')
+    const res = await request.get<any, Technician[]>('/users/technicians')
     technicianList.value = res || []
   } catch {
     // 错误已在拦截器中处理
@@ -626,8 +740,8 @@ const handleDispatchSubmit = async () => {
 
   dispatchLoading.value = true
   try {
-    await request.put(`/repair/${dispatchTarget.value!.id}/status`, {
-      status: 'assigned',
+    await request.post('/repair/dispatch', {
+      repairOrderId: dispatchTarget.value!.id,
       technicianId: dispatchForm.technicianId,
       remark: dispatchForm.remark || undefined,
     })
@@ -670,12 +784,13 @@ const handleQcSubmit = async () => {
 
   qcLoading.value = true
   try {
+    const newStatus = qcForm.result === 'pass' ? 'completed' : 'repairing'
     await request.put(`/repair/${qcTarget.value!.id}/status`, {
-      status: 'completed',
+      status: newStatus,
       qualityResult: qcForm.result,
       remark: qcForm.remark || undefined,
     })
-    ElMessage.success(qcForm.result === 'pass' ? '质检通过，工单已完成' : '质检不通过，已退回')
+    ElMessage.success(qcForm.result === 'pass' ? '质检通过，工单已完成' : '质检不通过，已退回维修中')
     qcDialogVisible.value = false
     fetchList()
   } catch {
@@ -709,6 +824,25 @@ const handleDeliver = (row: RepairOrder) => {
     .catch(() => {
       // 用户取消
     })
+}
+
+/** 删除 */
+const handleDelete = (row: RepairOrder) => {
+  ElMessageBox.confirm(`确定删除工单「${row.orderNo}」吗？删除后不可恢复。`, '删除确认', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+  })
+    .then(async () => {
+      try {
+        await request.delete(`/repair/${row.id}`)
+        ElMessage.success('删除成功')
+        fetchList()
+      } catch {
+        // 错误已在拦截器中处理
+      }
+    })
+    .catch(() => {})
 }
 
 // ==================== 状态工具函数 ====================
@@ -761,6 +895,75 @@ const getItemStatusTagType = (status: string): string => {
 const formatMoney = (val?: number): string => {
   if (val === undefined || val === null) return '0.00'
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// ==================== 导出与打印 ====================
+
+function handleExportExcel() {
+  downloadFile('/api/export/excel?module=repair', '维修工单.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+function handleExportPdf() {
+  exportTableToPdf(
+    '维修工单',
+    [
+      { header: '工单号', dataKey: 'orderNo' },
+      { header: '客户', dataKey: 'customerName' },
+      { header: '车牌', dataKey: 'plateNumber' },
+      { header: '状态', dataKey: 'status' },
+      { header: '总金额', dataKey: 'totalAmount' },
+      { header: '创建时间', dataKey: 'createdAt' },
+    ],
+    tableData.value,
+    '维修工单',
+  )
+}
+
+async function handlePrintOrder() {
+  if (!detail.value) {
+    ElMessage.warning('请先查看工单详情')
+    return
+  }
+  const d = detail.value
+  const printData = {
+    orderNo: d.orderNo,
+    customerName: d.customer?.name || '-',
+    customerPhone: d.customer?.phone || '-',
+    plateNumber: d.plateNumber,
+    vehicleModel: d.vehicleModel,
+    mileage: d.mileage,
+    serviceAdvisor: d.advisor?.realName || '-',
+    description: d.faultDesc || '-',
+    repairItems: d.items || [],
+    partsList: (d.items || []).filter((i: any) => i.partFee > 0).map((i: any) => ({
+      name: i.name, quantity: 1, unitPrice: i.partFee || 0, totalPrice: i.partFee || 0
+    })),
+    totalAmount: d.totalAmount,
+    createTime: d.createdAt,
+  }
+  const loadingMsg = ElMessage({ message: '正在生成打印内容...', type: 'info', duration: 0 })
+  try {
+    const container = document.createElement('div')
+    const safeData = deepEscape(printData)
+    const app = createApp({ render: () => h(RepairOrderPrint, { data: safeData }) })
+    app.mount(container)
+    await new Promise(r => setTimeout(r, 150))
+    const html = container.innerHTML
+    app.unmount()
+    if (!html || html.trim() === '') {
+      loadingMsg.close()
+      ElMessage.error('打印内容为空，请检查工单数据')
+      return
+    }
+    printHtml(html)
+    loadingMsg.close()
+  } catch (e: any) {
+    loadingMsg.close()
+    console.error('打印失败:', e)
+    ElMessage.error('打印失败：' + (e?.message || '未知错误'))
+  }
 }
 
 // ==================== 初始化 ====================

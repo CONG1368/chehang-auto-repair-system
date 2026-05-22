@@ -8,8 +8,11 @@ export class ReportController {
   constructor(private readonly reportService: ReportService) {}
 
   @Get('dashboard')
-  async getDashboardSummary() {
-    return this.reportService.getDashboardSummary();
+  async getDashboardSummary(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportService.getDashboardSummary(startDate, endDate);
   }
 
   @Get('revenue-trend')
@@ -51,5 +54,21 @@ export class ReportController {
   @Get('recent-payments')
   async getRecentPayments(@Query('limit') limit?: number) {
     return this.reportService.getRecentPayments(limit || 5);
+  }
+
+  @Get('beauty-stats')
+  async getBeautyStats(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportService.getBeautyStats(startDate, endDate);
+  }
+
+  @Get('staff-performance')
+  async getStaffPerformance(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportService.getStaffPerformance(startDate, endDate);
   }
 }

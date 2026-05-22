@@ -1,0 +1,117 @@
+<h2>🖨️ 打印功能 — 设计方案</h2>
+<p class="subtitle">7 处打印需求 · CSS @media print 模板 · print-js 调起浏览器打印</p>
+
+<div class="section">
+  <h3>1. 技术方案</h3>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="border:2px solid #409EFF;">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>iframe 打印模板 + print-js（推荐）</h3>
+      <p>用 print-js 调起浏览器打印，每个票据准备独立的打印模板组件</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>CSS 完全控制打印布局</li><li>支持打印预览</li><li>不污染主页面样式</li></ul></div>
+        <div class="cons"><h4>实现</h4><ul><li>安装 print-js</li><li>每个单据写独立打印模板</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>window.print + CSS @media</h3>
+      <p>直接调用浏览器打印当前页面</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>零依赖</li></ul></div>
+        <div class="cons"><h4>劣势</h4><ul><li>打印布局受限</li><li>无法隐藏UI控件</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 打印覆盖场景</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">7 处打印需求 + 打印按钮位置</div>
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#409EFF;color:#fff;">
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">页面</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">打印内容</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">按钮位置</th>
+      </tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">接车开单 reception</td><td style="border:1px solid #e4e7ed;">接车委托单（客户签字）</td><td style="border:1px solid #e4e7ed;">创建成功后弹出</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">工单详情 orders</td><td style="border:1px solid #e4e7ed;">维修施工单（含项目+配件明细）</td><td style="border:1px solid #e4e7ed;">详情抽屉底部</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">质检交车 quality</td><td style="border:1px solid #e4e7ed;">质检报告 + 交车确认单</td><td style="border:1px solid #e4e7ed;">操作列/顶部</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">销售订单 orders</td><td style="border:1px solid #e4e7ed;">销售合同/报价单</td><td style="border:1px solid #e4e7ed;">编辑弹窗底部</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">收银台 cashier</td><td style="border:1px solid #e4e7ed;">收款收据</td><td style="border:1px solid #e4e7ed;">收款成功后弹出</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">采购管理 purchase</td><td style="border:1px solid #e4e7ed;">采购单</td><td style="border:1px solid #e4e7ed;">编辑弹窗底部</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">对账报表 reports</td><td style="border:1px solid #e4e7ed;">对账单</td><td style="border:1px solid #e4e7ed;">报表顶部操作栏</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 维修工单打印模板预览（最关键的一张）</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">A4 维修施工单 — 打印预览</div>
+  <div class="mockup-body" style="padding:24px;background:#fff;max-width:700px;margin:0 auto;font-size:13px;border:1px solid #333;">
+    <div style="text-align:center;margin-bottom:16px;">
+      <h3 style="margin:0;font-size:18px;">车行维修厂 · 维修施工单</h3>
+      <div style="font-size:12px;color:#666;margin-top:4px;">No: RO20260520-003</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;border:1px solid #ddd;padding:12px;">
+      <div>车主：<strong>张三</strong></div><div>电话：13800138000</div>
+      <div>车牌：<strong>苏A12345</strong></div><div>车型：丰田卡罗拉 2024</div>
+      <div>进厂里程：<strong>35,680 km</strong></div><div>服务顾问：李四</div>
+      <div style="grid-column:1/-1;">故障描述：发动机异响，刹车时有尖锐噪音</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;">
+      <tr style="background:#eee;"><th style="border:1px solid #ddd;padding:6px;text-align:left;">序号</th><th style="border:1px solid #ddd;padding:6px;text-align:left;">维修项目</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">工时费(¥)</th><th style="border:1px solid #ddd;padding:6px;">技师</th></tr>
+      <tr><td style="border:1px solid #ddd;padding:6px;">1</td><td style="border:1px solid #ddd;padding:6px;">更换机油机滤</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">80.00</td><td style="border:1px solid #ddd;padding:6px;">王工</td></tr>
+      <tr><td style="border:1px solid #ddd;padding:6px;">2</td><td style="border:1px solid #ddd;padding:6px;">更换前刹车片</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">120.00</td><td style="border:1px solid #ddd;padding:6px;">王工</td></tr>
+      <tr style="background:#fafafa;"><td colspan="2" style="border:1px solid #ddd;padding:6px;text-align:right;"><strong>工时费合计</strong></td><td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:bold;">200.00</td><td style="border:1px solid #ddd;padding:6px;"></td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;">
+      <tr style="background:#eee;"><th style="border:1px solid #ddd;padding:6px;text-align:left;">配件名称</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">数量</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">单价(¥)</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">小计(¥)</th></tr>
+      <tr><td style="border:1px solid #ddd;padding:6px;">全合成机油 5W-30</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">4</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">85.00</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">340.00</td></tr>
+      <tr><td style="border:1px solid #ddd;padding:6px;">前刹车片（陶瓷）</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">1</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">380.00</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">380.00</td></tr>
+      <tr style="background:#fafafa;"><td colspan="3" style="border:1px solid #ddd;padding:6px;text-align:right;"><strong>配件费合计</strong></td><td style="border:1px solid #ddd;padding:6px;text-align:right;font-weight:bold;">720.00</td></tr>
+    </table>
+    <div style="text-align:right;font-size:16px;margin-bottom:24px;">
+      <strong>总计：¥920.00</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;">
+      <span>开单日期：2026-05-20 14:30</span>
+      <span>客户签字：__________</span>
+      <span>质检签字：__________</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 打印触发方式</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">三种触发模式</div>
+  <div class="mockup-body" style="padding:16px;font-size:14px;line-height:2;">
+    <div><strong>模式A — 按钮触发：</strong>在详情抽屉/弹窗底部放置「🖨️ 打印」按钮，点击立即生成打印模板</div>
+    <div style="margin-top:8px;"><strong>模式B — 成功自动弹出：</strong>接车开单成功 / 收款成功后，弹出提示"是否打印？"</div>
+    <div style="margin-top:8px;"><strong>模式C — 列表批量打印：</strong>工单列表用 checkbox 多选后，批量打印选中工单</div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    7 处打印 · print-js 打印模板 · 三种触发模式<br>
+    最关键的是维修工单打印（日常最高频）<br>
+    这个方案可以吗？
+  </p>
+</div>

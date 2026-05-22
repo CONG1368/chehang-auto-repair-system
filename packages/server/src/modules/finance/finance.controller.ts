@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -13,12 +14,18 @@ import { FinanceService } from './finance.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import {
   CreatePaymentDto,
+  UpdatePaymentDto,
   CreateReceivableDto,
   CreateExpenseDto,
   PaymentQueryDto,
   ReceivableQueryDto,
   ExpenseQueryDto,
   ProfitSummaryQueryDto,
+  CreatePayableDto,
+  PayableQueryDto,
+  UpdateExpenseDto,
+  UpdateReceivableDto,
+  UpdatePayableDto,
 } from './dto/finance.dto';
 
 @Controller('finance')
@@ -47,6 +54,16 @@ export class FinanceController {
     return this.financeService.createPayment(dto);
   }
 
+  @Put('payments/:id')
+  async updatePayment(@Param('id') id: string, @Body() dto: UpdatePaymentDto) {
+    return this.financeService.updatePayment(+id, dto);
+  }
+
+  @Delete('payments/:id')
+  async removePayment(@Param('id') id: string) {
+    return this.financeService.removePayment(+id);
+  }
+
   @Get('daily-summary')
   async getDailySummary(@Query('date') date?: string) {
     return this.financeService.getDailySummary(date);
@@ -59,19 +76,76 @@ export class FinanceController {
     return this.financeService.findAllReceivables(query);
   }
 
+  @Get('receivables/summary')
+  async getReceivableSummary() {
+    return this.financeService.getReceivableSummary();
+  }
+
+  @Get('receivables/:id')
+  async findReceivableOne(@Param('id') id: string) {
+    return this.financeService.findReceivableOne(+id);
+  }
+
   @Post('receivables')
   async createReceivable(@Body() dto: CreateReceivableDto) {
     return this.financeService.createReceivable(dto);
   }
 
   @Put('receivables/:id/pay')
-  async payReceivable(@Param('id') id: string, @Body('amount') amount: number) {
-    return this.financeService.payReceivable(+id, amount);
+  async payReceivable(
+    @Param('id') id: string,
+    @Body('amount') amount: number,
+    @Body('payMethod') payMethod?: string,
+    @Body('remark') remark?: string,
+  ) {
+    return this.financeService.payReceivable(+id, amount, payMethod, remark);
   }
 
-  @Get('receivables/summary')
-  async getReceivableSummary() {
-    return this.financeService.getReceivableSummary();
+  @Put('receivables/:id')
+  async updateReceivable(@Param('id') id: string, @Body() dto: UpdateReceivableDto) {
+    return this.financeService.updateReceivable(+id, dto);
+  }
+
+  @Delete('receivables/:id')
+  async removeReceivable(@Param('id') id: string) {
+    return this.financeService.deleteReceivable(+id);
+  }
+
+  // ==================== 应付账款 ====================
+
+  @Get('payables')
+  async findAllPayables(@Query() query: PayableQueryDto) {
+    return this.financeService.findAllPayables(query);
+  }
+
+  @Get('payables/summary')
+  async getPayableSummary() {
+    return this.financeService.getPayableSummary();
+  }
+
+  @Get('payables/:id')
+  async findPayableOne(@Param('id') id: string) {
+    return this.financeService.findPayableOne(+id);
+  }
+
+  @Post('payables')
+  async createPayable(@Body() dto: CreatePayableDto) {
+    return this.financeService.createPayable(dto);
+  }
+
+  @Put('payables/:id/pay')
+  async payPayable(@Param('id') id: string, @Body('amount') amount: number) {
+    return this.financeService.payPayable(+id, amount);
+  }
+
+  @Put('payables/:id')
+  async updatePayable(@Param('id') id: string, @Body() dto: UpdatePayableDto) {
+    return this.financeService.updatePayable(+id, dto);
+  }
+
+  @Delete('payables/:id')
+  async removePayable(@Param('id') id: string) {
+    return this.financeService.deletePayable(+id);
   }
 
   // ==================== 费用管理 ====================
@@ -84,6 +158,16 @@ export class FinanceController {
   @Post('expenses')
   async createExpense(@Body() dto: CreateExpenseDto) {
     return this.financeService.createExpense(dto);
+  }
+
+  @Put('expenses/:id')
+  async updateExpense(@Param('id') id: string, @Body() dto: UpdateExpenseDto) {
+    return this.financeService.updateExpense(+id, dto);
+  }
+
+  @Delete('expenses/:id')
+  async removeExpense(@Param('id') id: string) {
+    return this.financeService.deleteExpense(+id);
   }
 
   @Get('expenses/summary')

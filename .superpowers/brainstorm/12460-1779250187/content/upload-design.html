@@ -1,0 +1,137 @@
+<h2>📎 文件上传功能 — 设计方案</h2>
+<p class="subtitle">7 处上传需求 · multer 文件接收 · el-upload 组件 · 本地存储</p>
+
+<div class="section">
+  <h3>1. 技术方案</h3>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="border:2px solid #409EFF;">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>multer + 本地磁盘存储（推荐）</h3>
+      <p>后端 multer 接收文件存到 uploads/ 目录，ServeStaticModule 提供静态访问</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>零外部依赖费用</li><li>内网部署无网络延迟</li><li>实现简单</li></ul></div>
+        <div class="cons"><h4>注意</h4><ul><li>需要定期备份 uploads 目录</li><li>磁盘空间需监控</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>OSS 云存储</h3>
+      <p>上传到阿里云/腾讯云 OSS</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>无限扩容</li></ul></div>
+        <div class="cons"><h4>劣势</h4><ul><li>需要公网/费用</li><li>配置复杂</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 上传场景覆盖</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">7 处上传 + 数据库字段扩展</div>
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#409EFF;color:#fff;">
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">页面</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">上传内容</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">数据库新增字段</th>
+        <th style="padding:10px 12px;text-align:center;border:1px solid #409EFF;">多图</th>
+      </tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">客户档案</td><td style="border:1px solid #e4e7ed;">身份证/行驶证</td><td style="font-family:monospace;border:1px solid #e4e7ed;">idCardImage | licenseImage</td><td style="text-align:center;border:1px solid #e4e7ed;">单张</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">车辆管理</td><td style="border:1px solid #e4e7ed;">车辆外观/内饰照片</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td><td style="text-align:center;border:1px solid #e4e7ed;">✅ 多图</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">接车开单</td><td style="border:1px solid #e4e7ed;">故障部位照片</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td><td style="text-align:center;border:1px solid #e4e7ed;">✅ 多图</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">质检交车</td><td style="border:1px solid #e4e7ed;">质检照片/签字</td><td style="font-family:monospace;border:1px solid #e4e7ed;">checkImages Json</td><td style="text-align:center;border:1px solid #e4e7ed;">✅ 多图</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">配件管理</td><td style="border:1px solid #e4e7ed;">配件实物图</td><td style="font-family:monospace;border:1px solid #e4e7ed;">image</td><td style="text-align:center;border:1px solid #e4e7ed;">单张</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">用户管理</td><td style="border:1px solid #e4e7ed;">头像（avatar 字段已存在）</td><td style="font-family:monospace;border:1px solid #e4e7ed;">avatar ✨已存在</td><td style="text-align:center;border:1px solid #e4e7ed;">单张</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">采购管理</td><td style="border:1px solid #e4e7ed;">采购合同/发票扫描件</td><td style="font-family:monospace;border:1px solid #e4e7ed;">attachment</td><td style="text-align:center;border:1px solid #e4e7ed;">单张</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 后端文件存储结构</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">uploads/ 目录组织</div>
+  <div class="mockup-body" style="padding:16px;font-family:monospace;font-size:13px;line-height:1.8;">
+uploads/
+├── avatars/          <span style="color:#909399;">用户头像</span>
+│   └── 20260520-143000-xxx.jpg
+├── customers/        <span style="color:#909399;">客户证件照</span>
+│   └── 20260520-150000-xxx.jpg
+├── vehicles/         <span style="color:#909399;">车辆照片</span>
+│   └── 20260520-151000-xxx.jpg
+├── repair/           <span style="color:#909399;">维修工单照片</span>
+│   └── 20260520-152000-xxx.jpg
+├── quality/          <span style="color:#909399;">质检照片</span>
+│   └── 20260520-153000-xxx.jpg
+├── parts/            <span style="color:#909399;">配件图片</span>
+│   └── 20260520-154000-xxx.jpg
+└── purchase/         <span style="color:#909399;">采购附件</span>
+    └── 20260520-155000-xxx.pdf
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 前端上传组件 — 以车辆管理为例</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">车辆管理 — 新增/编辑弹窗中的图片上传</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="border:2px dashed #d9d9d9;border-radius:6px;padding:20px;text-align:center;margin-bottom:12px;cursor:pointer;">
+      <span style="font-size:28px;display:block;margin-bottom:8px;">📷</span>
+      <span style="color:#409EFF;">点击上传车辆照片</span>
+      <div style="font-size:12px;color:#909399;margin-top:4px;">支持 JPG/PNG，单张不超过 5MB</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="width:100px;height:100px;background:#f5f7fa;border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative;">
+        <span>外观</span>
+        <span style="position:absolute;top:-6px;right:-6px;background:#f56c6c;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:11px;cursor:pointer;">×</span>
+      </div>
+      <div style="width:100px;height:100px;background:#f5f7fa;border-radius:4px;display:flex;align-items:center;justify-content:center;position:relative;">
+        <span>内饰</span>
+        <span style="position:absolute;top:-6px;right:-6px;background:#f56c6c;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:11px;cursor:pointer;">×</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>5. 后端 API 设计</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">文件上传接口</div>
+  <div class="mockup-body" style="padding:16px;font-family:monospace;font-size:13px;line-height:1.8;">
+<span style="color:#409EFF;">POST</span> /upload/image?module=customers
+      → 单张图片上传 → 返回 { url: "/uploads/customers/xxx.jpg" }
+
+<span style="color:#409EFF;">POST</span> /upload/images?module=vehicles
+      → 多图上传 → 返回 { urls: ["/uploads/vehicles/xxx.jpg", ...] }
+
+<span style="color:#409EFF;">POST</span> /upload/file?module=purchase
+      → 附件上传(pdf/doc) → 返回 { url: "/uploads/purchase/xxx.pdf" }
+
+<span style="color:#67C23A;">GET</span>  /uploads/*   <span style="color:#909399;">← ServeStatic 静态文件访问</span>
+
+<span style="color:#909399;">限制：图片 max 5MB，附件 max 20MB</span>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    7 处上传 · multer 本地存储 · el-upload 组件 · 按模块分目录<br>
+    多图场景（车辆/工单/质检）支持多张上传<br>
+    这个方案可以吗？确认后我写完整设计文档并开始实现。
+  </p>
+</div>

@@ -14,6 +14,12 @@ export class UserController {
     return this.userService.findAll(query);
   }
 
+  // 技师列表（必须在 :id 之前，避免路由冲突）
+  @Get('technicians')
+  async findTechnicians() {
+    return this.userService.findTechnicians();
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.userService.findOne(+id);

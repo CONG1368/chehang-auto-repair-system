@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WsGateway } from '../ws/ws.gateway';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
 import {
   CreateVehicleDto,
@@ -9,11 +10,15 @@ import {
   CreateSalesOrderDto,
   UpdateSalesOrderDto,
   DeliveryDto,
+  CreateLeadFollowRecordDto,
 } from './dto/sales.dto';
 
 @Injectable()
 export class SalesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private wsGateway?: WsGateway,
+  ) {}
 
   // ==================== 车辆管理 ====================
 
@@ -47,6 +52,7 @@ export class SalesService {
       data: {
         ...dto,
         minPrice: dto.minPrice ?? 0,
+        images: dto.images ?? undefined,
       } as any,
     });
   }
@@ -86,7 +92,19 @@ export class SalesService {
       }),
       this.prisma.salesLead.count({ where }),
     ]);
-    return new PaginatedResult(list, total, query.page!, query.pageSize!);
+
+    // 映射为前端期望的 flat 字段名
+    const mappedList = list.map((lead) => ({
+      ...lead,
+      customerName: lead.customer?.name ?? null,
+      phone: lead.customer?.phone ?? null,
+      intendedVehicle: lead.intentModel,
+      intentLevel: lead.intent,
+      salesName: lead.user?.realName ?? null,
+      salesPhone: lead.user?.phone ?? null,
+    }));
+
+    return new PaginatedResult(mappedList, total, query.page!, query.pageSize!);
   }
 
   async findLeadOne(id: number) {
@@ -95,29 +113,143 @@ export class SalesService {
       include: {
         customer: true,
         user: { select: { id: true, realName: true, phone: true } },
+        followRecords: {
+          include: { user: { select: { id: true, realName: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!lead) throw new NotFoundException(`线索 #${id} 不存在`);
-    return lead;
+
+    return {
+      ...lead,
+      customerName: lead.customer?.name ?? null,
+      phone: lead.customer?.phone ?? null,
+      intendedVehicle: lead.intentModel,
+      intentLevel: lead.intent,
+      salesName: lead.user?.realName ?? null,
+      salesPhone: lead.user?.phone ?? null,
+    };
   }
 
   async createLead(dto: CreateLeadDto) {
-    return this.prisma.salesLead.create({ data: dto as any });
+    const data: any = { ...dto };
+    // 映射前端字段名到数据库字段
+    if (dto.intendedVehicle !== undefined) data.intentModel = dto.intendedVehicle;
+    if (dto.intentLevel !== undefined) data.intent = dto.intentLevel;
+    delete data.intendedVehicle;
+    delete data.intentLevel;
+    const lead = await this.prisma.salesLead.create({ data });
+
+    // WebSocket 推送新销售线索
+    const customer = data.customerId
+      ? await this.prisma.customer.findUnique({ where: { id: data.customerId }, select: { name: true } })
+      : null;
+    this.wsGateway?.notifyNewSalesLead({
+      leadId: lead.id,
+      customerName: customer?.name || '-',
+      intentModel: lead.intentModel || undefined,
+    });
+
+    return lead;
   }
 
-  async updateLead(id: number, dto: UpdateLeadDto) {
-    await this.findLeadOne(id);
+  async updateLead(id: number, dto: UpdateLeadDto, currentUserId?: number) {
+    const lead = await this.prisma.salesLead.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+    if (!lead) throw new NotFoundException(`线索 #${id} 不存在`);
+
+    // 归属校验：只有线索负责人和超级管理员可以修改
+    if (currentUserId && lead.userId !== currentUserId) {
+      await this.checkIsAdmin(currentUserId);
+    }
+
+    const data: any = { ...dto };
+    // 映射前端字段名到数据库字段
+    if (dto.intendedVehicle !== undefined) data.intentModel = dto.intendedVehicle;
+    if (dto.intentLevel !== undefined) data.intent = dto.intentLevel;
+    delete data.intendedVehicle;
+    delete data.intentLevel;
     return this.prisma.salesLead.update({
       where: { id },
-      data: this.stripUndefined(dto) as any,
+      data: this.stripUndefined(data) as any,
     });
+  }
+
+  async removeLead(id: number) {
+    await this.findLeadOne(id);
+    return this.prisma.$transaction([
+      this.prisma.leadFollowRecord.deleteMany({ where: { leadId: id } }),
+      this.prisma.salesLead.delete({ where: { id } }),
+    ]);
+  }
+
+  // ==================== 线索跟进记录 ====================
+
+  async getLeadFollowRecords(leadId: number) {
+    // 轻量存在性校验
+    const exists = await this.prisma.salesLead.count({ where: { id: leadId } });
+    if (!exists) throw new NotFoundException(`线索 #${leadId} 不存在`);
+
+    return this.prisma.leadFollowRecord.findMany({
+      where: { leadId },
+      include: { user: { select: { id: true, realName: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addLeadFollowRecord(leadId: number, userId: number, dto: CreateLeadFollowRecordDto & { status?: string }) {
+    // 轻量存在性校验
+    const lead = await this.prisma.salesLead.findUnique({
+      where: { id: leadId },
+      select: { id: true },
+    });
+    if (!lead) throw new NotFoundException(`线索 #${leadId} 不存在`);
+
+    const updateData: any = {};
+    if (dto.nextFollowAt) {
+      updateData.nextFollowAt = new Date(dto.nextFollowAt);
+    }
+    if (dto.status) {
+      updateData.status = dto.status;
+    }
+
+    const [followRecord] = await this.prisma.$transaction([
+      this.prisma.leadFollowRecord.create({
+        data: {
+          leadId,
+          userId,
+          type: dto.type,
+          content: dto.content,
+          nextFollowAt: dto.nextFollowAt ? new Date(dto.nextFollowAt) : null,
+        },
+        include: { user: { select: { id: true, realName: true } } },
+      }),
+      this.prisma.salesLead.update({
+        where: { id: leadId },
+        data: updateData,
+      }),
+    ]);
+
+    return followRecord;
   }
 
   // ==================== 销售订单 ====================
 
-  async findAllOrders(query: PaginationDto & { status?: string }) {
+  async findAllOrders(query: PaginationDto & { status?: string; keyword?: string }) {
     const where: any = {};
-    if (query.status) where.status = query.status;
+    if (query.status) {
+      const statuses = query.status.split(',');
+      where.status = statuses.length > 1 ? { in: statuses } : query.status;
+    }
+    if (query.keyword) {
+      where.OR = [
+        { orderNo: { contains: query.keyword } },
+        { customer: { name: { contains: query.keyword } } },
+      ];
+    }
 
     const [list, total] = await Promise.all([
       this.prisma.salesOrder.findMany({
@@ -132,7 +264,17 @@ export class SalesService {
       }),
       this.prisma.salesOrder.count({ where }),
     ]);
-    return new PaginatedResult(list, total, query.page!, query.pageSize!);
+
+    // 映射为前端期望的 flat 字段
+    const mappedList = list.map((order) => ({
+      ...order,
+      customerName: order.customer?.name ?? null,
+      vehicleInfo: order.vehicle
+        ? `${order.vehicle.brand} ${order.vehicle.series} ${order.vehicle.model}`
+        : null,
+    }));
+
+    return new PaginatedResult(mappedList, total, query.page!, query.pageSize!);
   }
 
   async findOrderOne(id: number) {
@@ -149,12 +291,25 @@ export class SalesService {
 
   async createOrder(dto: CreateSalesOrderDto) {
     const orderNo = await this.generateOrderNo();
-    return this.prisma.salesOrder.create({
+    const order = await this.prisma.salesOrder.create({
       data: {
         ...dto,
         orderNo,
       } as any,
     });
+
+    // WebSocket 推送新销售订单
+    const customer = dto.customerId
+      ? await this.prisma.customer.findUnique({ where: { id: dto.customerId }, select: { name: true } })
+      : null;
+    this.wsGateway?.notifyNewSalesOrder({
+      orderId: order.id,
+      orderNo: order.orderNo,
+      customerName: customer?.name || '-',
+      totalAmount: Number(order.totalAmount ?? 0),
+    });
+
+    return order;
   }
 
   async updateOrder(id: number, dto: UpdateSalesOrderDto) {
@@ -165,21 +320,36 @@ export class SalesService {
     });
   }
 
+  async removeOrder(id: number) {
+    await this.findOrderOne(id);
+    return this.prisma.salesOrder.delete({ where: { id } });
+  }
+
   async delivery(id: number, dto: DeliveryDto) {
     const order = await this.findOrderOne(id);
 
-    const data: any = { status: 'delivered' };
+    const data: any = { status: '已交付' };
     if (dto.deliveryDate) data.deliveryDate = new Date(dto.deliveryDate);
+    if (dto.checklist) data.deliveryChecklist = dto.checklist;
+    if (dto.remark) data.deliveryRemark = dto.remark;
 
-    const [updatedOrder] = await Promise.all([
-      this.prisma.salesOrder.update({ where: { id }, data }),
-      this.prisma.vehicleInfo.update({
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.salesOrder.update({ where: { id }, data });
+      await tx.vehicleInfo.update({
         where: { id: order.vehicleId },
-        data: { stockStatus: 'sold' },
-      }),
-    ]);
+        data: { stockStatus: '已售' },
+      });
+      return updatedOrder;
+    });
 
-    return updatedOrder;
+    // WebSocket 推送订单交车通知
+    this.wsGateway?.notifyOrderDelivered({
+      orderId: id,
+      orderNo: order.orderNo,
+      customerName: order.customer?.name || '-',
+    });
+
+    return result;
   }
 
   // ==================== 工具方法 ====================
@@ -188,6 +358,20 @@ export class SalesService {
     return Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== undefined),
     );
+  }
+
+  /** 检查用户是否为超级管理员 */
+  private async checkIsAdmin(userId: number): Promise<void> {
+    const user = await this.prisma.sysUser.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+    const permissions: any = typeof user?.role?.permissions === 'string'
+      ? JSON.parse(user.role.permissions as string)
+      : user?.role?.permissions;
+    if (!permissions || !permissions.includes('*')) {
+      throw new ForbiddenException('仅允许线索负责人或超级管理员操作');
+    }
   }
 
   private async generateOrderNo(): Promise<string> {

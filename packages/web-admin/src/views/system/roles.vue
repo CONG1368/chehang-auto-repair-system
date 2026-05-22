@@ -5,7 +5,7 @@
       <el-button type="primary" @click="handleAdd">新增角色</el-button>
     </div>
     <el-card>
-      <el-table :data="tableData" v-loading="loading" border stripe>
+      <el-table :data="tableData" v-loading="loading" border stripe @row-click="handleDetail">
         <el-table-column prop="name" label="角色名称" min-width="120" />
         <el-table-column prop="code" label="编码" min-width="120" />
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
@@ -22,10 +22,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" min-width="160" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="info" link size="small" @click.stop="handleDetail(row)">详情</el-button>
+            <el-button type="primary" link size="small" @click.stop="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click.stop="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -77,6 +78,34 @@
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 角色详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="角色详情"
+      direction="rtl"
+      size="450px"
+    >
+      <template v-if="detailRole">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="角色名称">{{ detailRole.name }}</el-descriptions-item>
+          <el-descriptions-item label="编码">{{ detailRole.code }}</el-descriptions-item>
+          <el-descriptions-item label="描述">{{ detailRole.description || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ detailRole.createdAt }}</el-descriptions-item>
+        </el-descriptions>
+        <div style="margin-top: 20px">
+          <h4 style="margin-bottom: 12px; color: #303133">拥有权限</h4>
+          <el-tag
+            v-for="perm in detailRole.permissions"
+            :key="perm"
+            style="margin-right: 8px; margin-bottom: 8px"
+          >
+            {{ permissionLabelMap[perm] || perm }}
+          </el-tag>
+          <el-empty v-if="!detailRole.permissions || detailRole.permissions.length === 0" description="暂无权限" :image-size="60" />
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -102,22 +131,7 @@ interface RoleForm {
   permissions: string[]
 }
 
-// ============ 权限选项 ============
-const permissionOptions = [
-  { label: 'dashboard-经营驾驶舱', value: 'dashboard' },
-  { label: 'sales-新车销售', value: 'sales' },
-  { label: 'repair-维修服务', value: 'repair' },
-  { label: 'beauty-美容服务', value: 'beauty' },
-  { label: 'finance-财务管理', value: 'finance' },
-  { label: 'inventory-库存管理', value: 'inventory' },
-  { label: 'customer-客户管理', value: 'customer' },
-  { label: 'report-数据报表', value: 'report' },
-]
-
-const permissionLabelMap = permissionOptions.reduce((map, item) => {
-  map[item.value] = item.label
-  return map
-}, {} as Record<string, string>)
+import { permissionOptions, permissionLabelMap } from '@/constants/permissions'
 
 // ============ 表格数据 ============
 const tableData = ref<Role[]>([])
@@ -240,6 +254,15 @@ async function handleDelete(row: Role) {
       ElMessage.error(msg || '删除失败')
     }
   }
+}
+
+// ============ 角色详情 ============
+const detailDrawerVisible = ref(false)
+const detailRole = ref<Role | null>(null)
+
+function handleDetail(row: Role) {
+  detailRole.value = row
+  detailDrawerVisible.value = true
 }
 
 // ============ 初始化 ============

@@ -5,7 +5,6 @@ import { PaginatedResult } from '../../common/dto/pagination.dto';
 import {
   CreateRepairOrderDto,
   UpdateRepairOrderDto,
-  RepairItemDto,
   DispatchDto,
   QualityCheckDto,
   RepairQueryDto,
@@ -22,7 +21,8 @@ export class RepairService {
     const where: any = {};
 
     if (query.status) {
-      where.status = query.status;
+      const statuses = query.status.split(',');
+      where.status = statuses.length > 1 ? { in: statuses } : query.status;
     }
     if (query.plateNumber) {
       where.plateNumber = { contains: query.plateNumber };
@@ -33,6 +33,13 @@ export class RepairService {
     if (query.customerName) {
       where.customer = { name: { contains: query.customerName } };
     }
+    if (query.keyword) {
+      where.OR = [
+        { orderNo: { contains: query.keyword } },
+        { plateNumber: { contains: query.keyword } },
+        { customer: { name: { contains: query.keyword } } },
+      ];
+    }
 
     const [list, total] = await Promise.all([
       this.prisma.repairOrder.findMany({
@@ -42,6 +49,7 @@ export class RepairService {
         include: {
           customer: true,
           advisor: true,
+          _count: { select: { items: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -91,6 +99,7 @@ export class RepairService {
           checkResult: dto.checkResult,
           advisorId: dto.advisorId,
           estCompleteTime: dto.estCompleteTime ? new Date(dto.estCompleteTime) : null,
+          images: dto.images ?? undefined,
           status: 'pending',
           items: {
             create: dto.items.map((item) => ({
@@ -134,6 +143,8 @@ export class RepairService {
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.faultDesc !== undefined) data.faultDesc = dto.faultDesc;
     if (dto.checkResult !== undefined) data.checkResult = dto.checkResult;
+    if (dto.images !== undefined) data.images = dto.images;
+    if (dto.checkImages !== undefined) data.checkImages = dto.checkImages;
 
     // If items are provided, replace them
     if (dto.items) {
@@ -175,7 +186,7 @@ export class RepairService {
     });
   }
 
-  async updateStatus(id: number, status: string) {
+  async updateStatus(id: number, status: string, actualHours?: number) {
     const existing = await this.prisma.repairOrder.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException(`工单 #${id} 不存在`);
@@ -197,6 +208,17 @@ export class RepairService {
       );
     }
 
+    // 状态机流转校验
+    const allowedTransitions: Record<string, string[]> = {
+      pending: ['assigned', 'cancelled'],
+      assigned: ['repairing', 'cancelled'],
+      repairing: ['quality_check', 'cancelled'],
+      quality_check: ['completed', 'repairing'],
+      completed: ['delivered'],
+      delivered: [],
+      cancelled: [],
+    };
+
     const statusNames: Record<string, string> = {
       pending: '待处理',
       assigned: '已派工',
@@ -206,6 +228,20 @@ export class RepairService {
       delivered: '已交车',
       cancelled: '已取消',
     };
+
+    if (!allowedTransitions[existing.status]?.includes(status)) {
+      throw new BadRequestException(
+        `不允许从「${statusNames[existing.status] || existing.status}」变更为「${statusNames[status] || status}」`,
+      );
+    }
+
+    // 当状态流转到 quality_check 时，更新派工记录的实际工时
+    if (status === 'quality_check' && actualHours != null) {
+      await this.prisma.dispatchRecord.updateMany({
+        where: { repairOrderId: id, status: 'in_progress' },
+        data: { actualHours, status: 'completed' },
+      });
+    }
 
     const updated = await this.prisma.repairOrder.update({
       where: { id },
@@ -221,32 +257,6 @@ export class RepairService {
     });
 
     return updated;
-  }
-
-  async updateItems(id: number, items: RepairItemDto[]) {
-    const existing = await this.prisma.repairOrder.findUnique({ where: { id } });
-    if (!existing) {
-      throw new NotFoundException(`工单 #${id} 不存在`);
-    }
-
-    return this.prisma.$transaction(async (tx) => {
-      await tx.repairOrderItem.deleteMany({ where: { repairOrderId: id } });
-      await tx.repairOrderItem.createMany({
-        data: items.map((item) => ({
-          repairOrderId: id,
-          type: item.type,
-          name: item.name,
-          laborFee: item.laborFee ?? 0,
-          partFee: item.partFee ?? 0,
-          amount: item.amount ?? 0,
-        })),
-      });
-
-      return tx.repairOrder.findUnique({
-        where: { id },
-        include: { items: true },
-      });
-    });
   }
 
   async dispatch(dto: DispatchDto) {
@@ -311,28 +321,37 @@ export class RepairService {
   }
 
   async qualityCheck(dto: QualityCheckDto) {
+    const repairOrderId = dto.repairOrderId!;
+    const checkerId = dto.checkerId!;
+    if (!repairOrderId) throw new BadRequestException('缺少工单ID');
+    if (!checkerId) throw new BadRequestException('缺少质检人ID');
+
     const order = await this.prisma.repairOrder.findUnique({
-      where: { id: dto.repairOrderId },
+      where: { id: repairOrderId },
     });
 
     if (!order) {
-      throw new NotFoundException(`工单 #${dto.repairOrderId} 不存在`);
+      throw new NotFoundException(`工单 #${repairOrderId} 不存在`);
+    }
+
+    if (order.status !== 'quality_check') {
+      throw new BadRequestException('当前状态不可质检，请先将工单流转至质检状态');
     }
 
     return this.prisma.$transaction(async (tx) => {
       // upsert quality check record
       const qc = await tx.qualityCheck.upsert({
-        where: { repairOrderId: dto.repairOrderId },
+        where: { repairOrderId },
         create: {
-          repairOrderId: dto.repairOrderId,
-          checkerId: dto.checkerId,
+          repairOrderId,
+          checkerId,
           itemsChecked: dto.itemsChecked ?? [],
           roadTest: dto.roadTest,
           isPassed: dto.isPassed,
           remark: dto.remark,
         },
         update: {
-          checkerId: dto.checkerId,
+          checkerId,
           itemsChecked: dto.itemsChecked ?? [],
           roadTest: dto.roadTest,
           isPassed: dto.isPassed,
@@ -343,7 +362,7 @@ export class RepairService {
       // If passed, update order status to completed
       if (dto.isPassed === 1) {
         await tx.repairOrder.update({
-          where: { id: dto.repairOrderId },
+          where: { id: repairOrderId },
           data: {
             status: 'completed',
             actualCompleteTime: new Date(),
@@ -352,7 +371,7 @@ export class RepairService {
       } else {
         // If failed, revert to repairing
         await tx.repairOrder.update({
-          where: { id: dto.repairOrderId },
+          where: { id: repairOrderId },
           data: { status: 'repairing' },
         });
       }
@@ -361,7 +380,14 @@ export class RepairService {
     });
   }
 
-  async deliver(id: number) {
+  async attachCheckImages(repairOrderId: number, images: string[]) {
+    return this.prisma.repairOrder.update({
+      where: { id: repairOrderId },
+      data: { checkImages: images },
+    });
+  }
+
+  async deliver(id: number, financials?: { laborFee?: number; partsFee?: number; discount?: number; finalAmount?: number }) {
     const order = await this.prisma.repairOrder.findUnique({
       where: { id },
     });
@@ -374,9 +400,17 @@ export class RepairService {
       throw new BadRequestException(`工单当前状态为 ${order.status}，需要先完成质检才能交车`);
     }
 
+    const data: any = { status: 'delivered' };
+    if (financials) {
+      if (financials.laborFee != null) data.totalLaborFee = financials.laborFee;
+      if (financials.partsFee != null) data.totalPartFee = financials.partsFee;
+      if (financials.discount != null) data.discount = financials.discount;
+      if (financials.finalAmount != null) data.finalAmount = financials.finalAmount;
+    }
+
     return this.prisma.repairOrder.update({
       where: { id },
-      data: { status: 'delivered' },
+      data,
     });
   }
 
@@ -420,7 +454,15 @@ export class RepairService {
       throw new NotFoundException(`工单 #${id} 不存在`);
     }
 
-    return this.prisma.repairOrder.delete({ where: { id } });
+    await this.prisma.$transaction([
+      this.prisma.qualityCheck.deleteMany({ where: { repairOrderId: id } }),
+      this.prisma.dispatchRecord.deleteMany({ where: { repairOrderId: id } }),
+      this.prisma.repairOrderItem.deleteMany({ where: { repairOrderId: id } }),
+      this.prisma.paymentRecord.deleteMany({ where: { repairOrderId: id } }),
+      this.prisma.repairOrder.delete({ where: { id } }),
+    ]);
+
+    return { message: '工单已删除' };
   }
 
   /**

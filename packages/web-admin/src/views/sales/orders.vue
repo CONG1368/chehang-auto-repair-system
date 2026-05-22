@@ -7,6 +7,8 @@
       <!-- 操作栏 -->
       <div class="search-bar">
         <el-button type="success" @click="handleAdd">新建订单</el-button>
+        <el-button type="success" plain @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf">📄 导出PDF</el-button>
       </div>
 
       <!-- 表格 -->
@@ -16,6 +18,7 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleDetail"
       >
         <el-table-column prop="orderNo" label="订单号" min-width="160" />
         <el-table-column prop="customerName" label="客户" min-width="100" />
@@ -42,10 +45,16 @@
         </el-table-column>
         <el-table-column prop="salesConsultant" label="销售顾问" min-width="100" />
         <el-table-column prop="createdAt" label="创建时间" min-width="160" />
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               编辑
+            </el-button>
+            <el-button link type="danger" size="small" @click="handleDelete(row)">
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -257,19 +266,80 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="handlePrintOrder">🖨️ 打印合同</el-button>
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">
           确定
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="订单详情"
+      size="500px"
+      :close-on-click-modal="true"
+    >
+      <template v-if="detailRow">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="订单号">{{ detailRow.orderNo }}</el-descriptions-item>
+          <el-descriptions-item label="客户">{{ detailRow.customerName }}</el-descriptions-item>
+          <el-descriptions-item label="车辆">{{ detailRow.vehicleInfo }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="orderStatusTagType(detailRow.status)" size="small">
+              {{ detailRow.status || '-' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="车价">&yen;{{ detailRow.carPrice != null ? Number(detailRow.carPrice).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="优惠">&yen;{{ detailRow.discount != null ? Number(detailRow.discount).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="购置税">&yen;{{ detailRow.purchaseTax != null ? Number(detailRow.purchaseTax).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="保险">&yen;{{ detailRow.insurance != null ? Number(detailRow.insurance).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="精品费">&yen;{{ detailRow.accessories != null ? Number(detailRow.accessories).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="服务费">&yen;{{ detailRow.serviceFee != null ? Number(detailRow.serviceFee).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="销售价">&yen;{{ detailRow.salePrice != null ? Number(detailRow.salePrice).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="定金">&yen;{{ detailRow.deposit != null ? Number(detailRow.deposit).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="总金额">&yen;{{ detailRow.totalAmount != null ? Number(detailRow.totalAmount).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="销售顾问">{{ detailRow.salesConsultantName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间" :span="2">{{ detailRow.createdAt }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted, computed, h, createApp } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { printHtml } from '@/utils/print'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
+import SalesOrderPrint from '@/components/PrintTemplate/SalesOrderPrint.vue'
+
+/** HTML 实体转义，防止 XSS */
+function escapeHtml(str: any): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** 递归深度转义对象中所有字符串值（防御纵深，配合 Vue {{ }} 模板转义） */
+function deepEscape(data: any): any {
+  if (typeof data === 'string') return escapeHtml(data)
+  if (Array.isArray(data)) return data.map(deepEscape)
+  if (data !== null && typeof data === 'object') {
+    const result: Record<string, any> = {}
+    for (const key of Object.keys(data)) {
+      result[key] = deepEscape(data[key])
+    }
+    return result
+  }
+  return data
+}
 
 // ==================== 类型定义 ====================
 interface Order {
@@ -349,6 +419,7 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const currentId = ref<number | null>(null)
+const editRow = ref<Order | null>(null)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
@@ -503,6 +574,7 @@ function handleAdd() {
 function handleEdit(row: Order) {
   isEdit.value = true
   currentId.value = row.id
+  editRow.value = row
   form.customerId = row.customerId
   form.vehicleId = row.vehicleId
   form.carPrice = row.carPrice
@@ -554,6 +626,88 @@ async function handleSubmit() {
   } finally {
     submitLoading.value = false
   }
+}
+
+/** 删除 */
+function handleDelete(row: Order) {
+  ElMessageBox.confirm(`确定删除订单「${row.orderNo}」吗？`, '删除确认', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+  })
+    .then(async () => {
+      try {
+        await request.delete(`/sales/orders/${row.id}`)
+        ElMessage.success('删除成功')
+        fetchData()
+      } catch {
+        // 错误已在拦截器中处理
+      }
+    })
+    .catch(() => {})
+}
+
+// ==================== 详情抽屉 ====================
+const detailDrawerVisible = ref(false)
+const detailRow = ref<Order | null>(null)
+
+function handleDetail(row: Order) {
+  detailRow.value = row
+  detailDrawerVisible.value = true
+}
+
+// ==================== 导出与打印 ====================
+
+function handleExportExcel() {
+  downloadFile('/api/export/excel?module=sales', '销售订单.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+function handleExportPdf() {
+  exportTableToPdf(
+    '销售订单',
+    [
+      { header: '订单号', dataKey: 'orderNo' },
+      { header: '客户', dataKey: 'customerName' },
+      { header: '车辆信息', dataKey: 'vehicleInfo' },
+      { header: '销售价', dataKey: 'salePrice' },
+      { header: '状态', dataKey: 'status' },
+      { header: '创建时间', dataKey: 'createdAt' },
+    ],
+    tableData.value,
+    '销售订单',
+  )
+}
+
+async function handlePrintOrder() {
+  const container = document.createElement('div')
+  let dataForPrint: any
+
+  if (isEdit.value && editRow.value) {
+    // 编辑模式：基于已保存的完整数据，覆盖用户当前编辑的金额字段
+    dataForPrint = {
+      ...editRow.value,
+      carPrice: form.carPrice ?? editRow.value.carPrice,
+      discount: form.discount ?? editRow.value.discount,
+      purchaseTax: form.purchaseTax ?? editRow.value.purchaseTax,
+      insurance: form.insurance ?? editRow.value.insurance,
+      accessories: form.accessories ?? editRow.value.accessories,
+      serviceFee: form.serviceFee ?? editRow.value.serviceFee,
+      deposit: form.deposit ?? editRow.value.deposit,
+      salesConsultantName: editRow.value.salesConsultantName,
+    }
+  } else {
+    // 新增模式：从表单构建（缺少 orderNo 等后端生成字段属正常）
+    dataForPrint = { ...form }
+  }
+
+  const safeData = deepEscape(dataForPrint)
+  const app = createApp({ render: () => h(SalesOrderPrint, { data: safeData }) })
+  app.mount(container)
+  await new Promise(r => setTimeout(r, 100))
+  printHtml(container.innerHTML)
+  app.unmount()
 }
 
 // ==================== 生命周期 ====================

@@ -1,7 +1,7 @@
 <template>
   <view class="page">
     <view class="logo-area">
-      <text class="app-name">泰州车行维修厂</text>
+      <text class="app-name">车行</text>
       <text class="app-desc">综合管理系统</text>
     </view>
     <view class="form">

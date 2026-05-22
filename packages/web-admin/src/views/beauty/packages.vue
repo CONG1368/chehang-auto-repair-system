@@ -17,6 +17,9 @@
           搜索
         </el-button>
         <el-button style="margin-left: 12px" @click="handleReset">重置</el-button>
+        <el-button style="margin-left: 12px" @click="handleExport">
+          <el-icon style="margin-right: 4px"><Download /></el-icon>导出Excel
+        </el-button>
         <el-button type="success" style="margin-left: auto" @click="handleAdd">
           新增套餐
         </el-button>
@@ -156,8 +159,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
 
 // ==================== 类型定义 ====================
 interface Service {
@@ -272,6 +277,13 @@ function handleReset() {
   handleSearch()
 }
 
+/** 导出 Excel */
+function handleExport() {
+  downloadFile('/api/export/excel?module=beauty', '美容套餐.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
 /** 新增 */
 function handleAdd() {
   isEdit.value = false
@@ -307,7 +319,7 @@ async function handleSubmit() {
       name: form.name,
       originalPrice: form.originalPrice,
       packagePrice: form.packagePrice,
-      serviceIds: form.serviceIds,
+      items: form.serviceIds,
     }
 
     if (isEdit.value) {

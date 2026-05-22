@@ -1,0 +1,134 @@
+<h2>📊 导出功能 — 设计方案</h2>
+<p class="subtitle">报表导出 PDF · 列表导出 Excel · 后端生成文件流 · 前端触发下载</p>
+
+<div class="section">
+  <h3>1. 技术方案对比</h3>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="border:2px solid #409EFF;">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>后端生成 + 前端下载（推荐）</h3>
+      <p>Excel: exceljs 生成 .xlsx | PDF: jspdf 服务端渲染</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>不受前端DOM限制</li><li>PDF 中文无乱码</li><li>大数据量不卡浏览器</li></ul></div>
+        <div class="cons"><h4>实现</h4><ul><li>新建导出专用 Controller</li><li>exceljs + @types/exceljs</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>纯前端生成</h3>
+      <p>xlsx 库 + jspdf + html2canvas</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>不增加后端接口</li></ul></div>
+        <div class="cons"><h4>劣势</h4><ul><li>PDF 中文需要额外字体</li><li>大数据量页面卡顿</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 需要导出的页面</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">报表类 → 导出 PDF + Excel · 列表类 → 导出 Excel</div>
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#409EFF;color:#fff;">
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">页面</th>
+        <th style="padding:10px 12px;text-align:center;border:1px solid #409EFF;">PDF</th>
+        <th style="padding:10px 12px;text-align:center;border:1px solid #409EFF;">Excel</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #409EFF;">备注</th>
+      </tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">对账报表 — 日报/周报/月报</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">已有占位按钮</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">利润分析</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">含ECharts图表快照</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">销售分析</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">含趋势图</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">维修分析</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">含分析图</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">财务分析</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">含收支图</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">数据大屏</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="text-align:center;border:1px solid #e4e7ed;color:#909399;">—</td><td style="border:1px solid #e4e7ed;">仅PDF快照</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">客户档案列表</td><td style="text-align:center;border:1px solid #e4e7ed;color:#909399;">—</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">导出全部客户</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">配件库存列表</td><td style="text-align:center;border:1px solid #e4e7ed;color:#909399;">—</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">库存清单</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">维修工单列表</td><td style="text-align:center;border:1px solid #e4e7ed;color:#909399;">—</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">工单明细导出</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">销售订单列表</td><td style="text-align:center;border:1px solid #e4e7ed;color:#909399;">—</td><td style="text-align:center;border:1px solid #e4e7ed;color:#67C23A;">✅</td><td style="border:1px solid #e4e7ed;">订单明细导出</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 按钮位置 — 以对账报表为例</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">报表页面导出按钮布局</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <input class="mock-input" style="width:150px;" placeholder="选择日期范围">
+      <button class="mock-button">查询</button>
+      <span style="flex:1;"></span>
+      <button class="mock-button" style="background:#67C23A;color:#fff;border-color:#67C23A;">
+        📥 导出Excel
+      </button>
+      <button class="mock-button" style="background:#E6A23C;color:#fff;border-color:#E6A23C;">
+        📄 导出PDF
+      </button>
+    </div>
+    <div class="placeholder" style="height:200px;text-align:center;line-height:200px;">报表数据表格区域</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 列表页面导出按钮 — 以工单列表为例</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">工单列表顶部操作栏</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <input class="mock-input" style="width:200px;" placeholder="搜索工单号或客户">
+      <span class="mock-input" style="width:120px;text-align:center;">全部状态</span>
+      <button class="mock-button">搜索</button>
+      <span style="flex:1;"></span>
+      <button class="mock-button" style="background:#67C23A;color:#fff;border-color:#67C23A;">
+        📥 导出Excel
+      </button>
+      <button class="mock-button">＋ 接车开单</button>
+    </div>
+    <div class="placeholder" style="height:150px;text-align:center;line-height:150px;">工单列表表格区域</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>5. 后端 API 设计</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">统一导出接口</div>
+  <div class="mockup-body" style="padding:16px;font-family:monospace;font-size:13px;line-height:1.8;">
+<span style="color:#409EFF;">GET</span>  /export/excel?module=report&type=daily&startDate=...&endDate=...
+      → 返回 .xlsx 文件流 (Content-Disposition: attachment)
+
+<span style="color:#E6A23C;">GET</span>  /export/pdf?module=report&type=daily&startDate=...&endDate=...
+      → 返回 .pdf 文件流
+
+<span style="color:#67C23A;">GET</span>  /export/excel?module=customers&keyword=...&pageSize=all
+      → 导出全部客户数据
+
+<span style="color:#909399;">参数说明：</span>
+  module  = report | customers | parts | repair | sales
+  type    = daily | weekly | monthly | summary
+  pageSize = all 表示导出全部（不传则按分页导出当前页）
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    10 个页面导出功能 · 统一后端接口 · Excel + PDF 双格式<br>
+    报表默认双导出按钮，列表默认 Excel 导出按钮<br>
+    这个方案可以吗？
+  </p>
+</div>

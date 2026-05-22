@@ -1,4 +1,5 @@
-import { IsString, IsInt, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsArray, MaxLength } from 'class-validator';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class CreateCustomerDto {
   @IsString()
@@ -31,6 +32,10 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   remark?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: string[];
 }
 
 export class UpdateCustomerDto {
@@ -66,6 +71,10 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   remark?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: string[];
 }
 
 export class CreateVehicleDto {
@@ -94,7 +103,7 @@ export class CreateVehicleDto {
   mileage?: number;
 }
 
-export class CustomerSearchDto {
+export class CustomerSearchDto extends PaginationDto {
   @IsOptional()
   @IsString()
   keyword?: string;

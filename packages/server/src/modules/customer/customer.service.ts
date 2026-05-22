@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
+import { RedisService } from '../../redis/redis.service';
+import { WsGateway } from '../ws/ws.gateway';
+import { PaginatedResult } from '../../common/dto/pagination.dto';
 import { CreateCustomerDto, UpdateCustomerDto, CreateVehicleDto, CustomerSearchDto } from './dto/customer.dto';
 
 function diffDays(a: Date, b: Date): number {
@@ -15,15 +17,27 @@ function addMonths(d: Date, months: number): Date {
 
 @Injectable()
 export class CustomerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly redis?: RedisService,
+    private wsGateway?: WsGateway,
+  ) {}
 
-  async findAll(query: PaginationDto & CustomerSearchDto) {
+  async findAll(query: CustomerSearchDto) {
+    const cacheKey = `customers:list:${JSON.stringify(query)}`;
+
+    // 尝试从 Redis 缓存读取
+    if (this.redis) {
+      const cached = await this.redis.getJson(cacheKey);
+      if (cached) return cached;
+    }
+
     const where: any = {};
     if (query.keyword) {
       where.OR = [
         { name: { contains: query.keyword } },
         { phone: { contains: query.keyword } },
-        { plateNumber: { contains: query.keyword } },
+        { vehicles: { some: { plateNumber: { contains: query.keyword } } } },
       ];
     }
     if (query.phone) where.phone = { contains: query.phone };
@@ -38,7 +52,14 @@ export class CustomerService {
       }),
       this.prisma.customer.count({ where }),
     ]);
-    return new PaginatedResult(list, total, query.page!, query.pageSize!);
+    const result = new PaginatedResult(list, total, query.page!, query.pageSize!);
+
+    // 写入缓存，TTL 60 秒
+    if (this.redis) {
+      await this.redis.setJson(cacheKey, result, 60);
+    }
+
+    return result;
   }
 
   async findOne(id: number) {
@@ -56,24 +77,49 @@ export class CustomerService {
   }
 
   async create(dto: CreateCustomerDto) {
-    return this.prisma.customer.create({
-      data: { ...dto, birthday: dto.birthday ? new Date(dto.birthday) : null },
+    const customer = await this.prisma.customer.create({
+      data: { ...dto, birthday: dto.birthday ? new Date(dto.birthday) : null, images: dto.images ?? undefined },
       include: { vehicles: true },
     });
+    // 清除客户列表缓存
+    await this.clearCustomerCache();
+    // 推送新客户通知
+    this.wsGateway?.notifyNewCustomer({
+      customerId: customer.id,
+      name: customer.name,
+      phone: customer.phone || '',
+    });
+    return customer;
   }
 
   async update(id: number, dto: UpdateCustomerDto) {
     await this.findOne(id);
-    return this.prisma.customer.update({
+    const customer = await this.prisma.customer.update({
       where: { id },
-      data: { ...dto, birthday: dto.birthday ? new Date(dto.birthday) : undefined },
+      data: { ...dto, birthday: dto.birthday ? new Date(dto.birthday) : undefined, images: dto.images ?? undefined },
       include: { vehicles: true },
     });
+    // 清除客户列表缓存
+    await this.clearCustomerCache();
+    return customer;
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    await this.prisma.customer.delete({ where: { id } });
+    // 级联删除关联记录，避免外键约束失败
+    await this.prisma.$transaction([
+      this.prisma.followRecord.deleteMany({ where: { customerId: id } }),
+      this.prisma.customerVehicle.deleteMany({ where: { customerId: id } }),
+      this.prisma.memberCardRecharge.deleteMany({ where: { customerId: id } }),
+      this.prisma.paymentRecord.deleteMany({ where: { customerId: id } }),
+      this.prisma.receivable.deleteMany({ where: { customerId: id } }),
+      this.prisma.salesLead.deleteMany({ where: { customerId: id } }),
+      this.prisma.salesOrder.deleteMany({ where: { customerId: id } }),
+      this.prisma.repairOrder.deleteMany({ where: { customerId: id } }),
+      this.prisma.customer.delete({ where: { id } }),
+    ]);
+    // 清除客户列表缓存
+    await this.clearCustomerCache();
     return { message: '删除成功' };
   }
 
@@ -86,15 +132,15 @@ export class CustomerService {
     return this.prisma.customerVehicle.create({ data: { ...dto, customerId } });
   }
 
-  async updateVehicle(id: number, dto: Partial<CreateVehicleDto>) {
-    const vehicle = await this.prisma.customerVehicle.findUnique({ where: { id } });
-    if (!vehicle) throw new NotFoundException('车辆不存在');
+  async updateVehicle(customerId: number, id: number, dto: Partial<CreateVehicleDto>) {
+    const vehicle = await this.prisma.customerVehicle.findFirst({ where: { id, customerId } });
+    if (!vehicle) throw new NotFoundException('车辆不存在或不属于该客户');
     return this.prisma.customerVehicle.update({ where: { id }, data: dto });
   }
 
-  async removeVehicle(id: number) {
-    const vehicle = await this.prisma.customerVehicle.findUnique({ where: { id } });
-    if (!vehicle) throw new NotFoundException('车辆不存在');
+  async removeVehicle(customerId: number, id: number) {
+    const vehicle = await this.prisma.customerVehicle.findFirst({ where: { id, customerId } });
+    if (!vehicle) throw new NotFoundException('车辆不存在或不属于该客户');
     await this.prisma.customerVehicle.delete({ where: { id } });
     return { message: '删除成功' };
   }
@@ -109,12 +155,14 @@ export class CustomerService {
   }
 
   async addFollowRecord(customerId: number, data: { type: string; content: string; userId: number; nextFollowAt?: string }) {
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { lastVisitAt: new Date(), visitCount: { increment: 1 } },
-    });
-    return this.prisma.followRecord.create({
-      data: { ...data, customerId, nextFollowAt: data.nextFollowAt ? new Date(data.nextFollowAt) : null },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { lastVisitAt: new Date(), visitCount: { increment: 1 } },
+      });
+      return tx.followRecord.create({
+        data: { ...data, customerId, nextFollowAt: data.nextFollowAt ? new Date(data.nextFollowAt) : null },
+      });
     });
   }
 
@@ -225,5 +273,16 @@ export class CustomerService {
 
     results.sort((a, b) => a.remainDays - b.remainDays);
     return results;
+  }
+
+  // ==================== Redis 缓存辅助 ====================
+
+  /** 清除 customers 相关缓存 */
+  private async clearCustomerCache() {
+    if (!this.redis) return;
+    const keys = await this.redis.keys('customers:*');
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
   }
 }

@@ -19,6 +19,7 @@ import {
   StockSearchDto,
   StockRecordDto,
   CreatePurchaseDto,
+  UpdatePurchaseDto,
   PurchaseSearchDto,
 } from './dto/inventory.dto';
 
@@ -28,7 +29,7 @@ export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Get()
-  async findAll(@Query() query: PaginationDto & StockSearchDto) {
+  async findAll(@Query() query: StockSearchDto) {
     return this.inventoryService.findAll(query);
   }
 
@@ -54,7 +55,7 @@ export class InventoryController {
 
   // 采购管理（必须在 :id 之前）
   @Get('purchase')
-  async findPurchaseOrders(@Query() query: PaginationDto & PurchaseSearchDto) {
+  async findPurchaseOrders(@Query() query: PurchaseSearchDto) {
     return this.inventoryService.findPurchaseOrders(query);
   }
 
@@ -99,6 +100,16 @@ export class InventoryController {
   @Post('purchase')
   async createPurchaseOrder(@Body() body: CreatePurchaseDto, @Request() req: any) {
     return this.inventoryService.createPurchaseOrder(body, req.user.id);
+  }
+
+  @Put('purchase/:id')
+  async updatePurchaseOrder(@Param('id') id: string, @Body() body: UpdatePurchaseDto) {
+    return this.inventoryService.updatePurchase(+id, body);
+  }
+
+  @Delete('purchase/:id')
+  async removePurchaseOrder(@Param('id') id: string) {
+    return this.inventoryService.removePurchaseOrder(+id);
   }
 
   @Delete(':id')

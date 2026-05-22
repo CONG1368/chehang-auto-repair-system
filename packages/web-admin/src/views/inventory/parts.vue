@@ -31,7 +31,9 @@
           搜索
         </el-button>
         <el-button style="margin-left: 12px" @click="handleReset">重置</el-button>
-        <el-button type="success" style="margin-left: auto" @click="handleAdd">
+        <el-button type="success" plain @click="handleExportExcel" style="margin-left: auto">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf" style="margin-left: 12px">📄 导出PDF</el-button>
+        <el-button type="success" style="margin-left: 12px" @click="handleAdd">
           新增配件
         </el-button>
       </div>
@@ -43,6 +45,7 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleDetail"
       >
         <el-table-column prop="code" label="配件编码" min-width="130" />
         <el-table-column prop="name" label="名称" min-width="140" />
@@ -54,7 +57,7 @@
         <el-table-column prop="categoryName" label="分类名称" min-width="110" />
         <el-table-column label="单价(¥)" min-width="100" align="right">
           <template #default="{ row }">
-            {{ row.unitPrice != null ? row.unitPrice.toFixed(2) : '-' }}
+            {{ row.price != null ? Number(row.price).toFixed(2) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="安全库存" min-width="90" align="center">
@@ -69,8 +72,11 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="310" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               编辑
             </el-button>
@@ -152,9 +158,9 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="单价" prop="unitPrice">
+        <el-form-item label="单价" prop="price">
           <el-input-number
-            v-model="form.unitPrice"
+            v-model="form.price"
             :min="0"
             :precision="2"
             :step="1"
@@ -162,9 +168,9 @@
             placeholder="请输入单价"
           />
         </el-form-item>
-        <el-form-item label="成本价" prop="costPrice">
+        <el-form-item label="成本价" prop="cost">
           <el-input-number
-            v-model="form.costPrice"
+            v-model="form.cost"
             :min="0"
             :precision="2"
             :step="1"
@@ -192,6 +198,19 @@
         </el-form-item>
         <el-form-item label="货架位置" prop="shelfLocation">
           <el-input v-model="form.shelfLocation" placeholder="请输入货架位置" />
+        </el-form-item>
+        <el-form-item label="配件图片">
+          <el-upload
+            multiple
+            drag
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :file-list="fileList"
+            accept="image/*"
+          >
+            <el-icon :size="32"><UploadFilled /></el-icon>
+            <div>拖拽或点击批量上传</div>
+          </el-upload>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -283,6 +302,36 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="配件详情"
+      size="500px"
+      :close-on-click-modal="true"
+    >
+      <template v-if="detailRow">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="配件编码">{{ detailRow.code }}</el-descriptions-item>
+          <el-descriptions-item label="配件名称">{{ detailRow.name }}</el-descriptions-item>
+          <el-descriptions-item label="规格">{{ detailRow.spec || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="分类">{{ detailRow.categoryName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="供应商">{{ detailRow.supplierName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="单价">&yen;{{ detailRow.price != null ? Number(detailRow.price).toFixed(2) : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="成本价">&yen;{{ detailRow.cost != null ? Number(detailRow.cost).toFixed(2) : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="安全库存">{{ detailRow.safetyStock ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="最大库存">{{ detailRow.maxStock ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="当前库存" :span="2">
+            <span :style="{ color: detailRow.currentStock < detailRow.safetyStock ? 'red' : '', fontWeight: detailRow.currentStock < detailRow.safetyStock ? 'bold' : '' }">
+              {{ detailRow.currentStock ?? '-' }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="货架位置">{{ detailRow.shelfLocation || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ detailRow.createdAt }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间" :span="2">{{ detailRow.updatedAt }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -291,6 +340,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
+import { UploadFilled } from '@element-plus/icons-vue'
 
 // ==================== 类型定义 ====================
 interface Part {
@@ -302,8 +355,8 @@ interface Part {
   categoryName: string
   supplierId: number | null
   supplierName: string
-  unitPrice: number
-  costPrice: number
+  price: number
+  cost: number
   safetyStock: number
   maxStock: number
   currentStock: number
@@ -328,8 +381,8 @@ interface PartForm {
   spec: string
   categoryId: number | null
   supplierId: number | null
-  unitPrice: number | null
-  costPrice: number | null
+  price: number | null
+  cost: number | null
   safetyStock: number | null
   maxStock: number | null
   shelfLocation: string
@@ -374,8 +427,8 @@ const initForm = (): PartForm => ({
   spec: '',
   categoryId: null,
   supplierId: null,
-  unitPrice: null,
-  costPrice: null,
+  price: null,
+  cost: null,
   safetyStock: null,
   maxStock: null,
   shelfLocation: '',
@@ -388,7 +441,7 @@ const formRules: FormRules = {
   name: [{ required: true, message: '请输入配件名称', trigger: 'blur' }],
   categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }],
   supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
-  unitPrice: [{ required: true, message: '请输入单价', trigger: 'blur' }],
+  price: [{ required: true, message: '请输入单价', trigger: 'blur' }],
   safetyStock: [{ required: true, message: '请输入安全库存', trigger: 'blur' }],
 }
 
@@ -487,8 +540,8 @@ function handleEdit(row: Part) {
   form.spec = row.spec
   form.categoryId = row.categoryId
   form.supplierId = row.supplierId
-  form.unitPrice = row.unitPrice
-  form.costPrice = row.costPrice
+  form.price = Number(row.price)
+  form.cost = Number(row.cost)
   form.safetyStock = row.safetyStock
   form.maxStock = row.maxStock
   form.shelfLocation = row.shelfLocation
@@ -498,12 +551,53 @@ function handleEdit(row: Part) {
 /** 弹窗关闭后清理验证 */
 function handleDialogClosed() {
   formRef.value?.resetFields()
+  fileList.value = []
+  pendingFiles.value = []
+}
+
+// ==================== 文件上传 ====================
+
+const fileList = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
+
+function handleFileChange(file: any) {
+  pendingFiles.value.push(file.raw)
+}
+
+function handleExportExcel() {
+  downloadFile('/api/export/excel?module=parts', '配件列表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+function handleExportPdf() {
+  exportTableToPdf(
+    '配件列表',
+    [
+      { header: '编码', dataKey: 'code' },
+      { header: '名称', dataKey: 'name' },
+      { header: '规格', dataKey: 'spec' },
+      { header: '分类', dataKey: 'categoryName' },
+      { header: '单价', dataKey: 'price' },
+      { header: '库存', dataKey: 'currentStock' },
+      { header: '安全库存', dataKey: 'safetyStock' },
+    ],
+    tableData.value,
+    '配件列表',
+  )
 }
 
 /** 提交表单 */
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
+
+  let images: string[] | undefined
+  if (pendingFiles.value.length > 0) {
+    images = await uploadFiles(pendingFiles.value, 'parts')
+    pendingFiles.value = []
+    fileList.value = []
+  }
 
   submitLoading.value = true
   try {
@@ -513,11 +607,12 @@ async function handleSubmit() {
       spec: form.spec,
       categoryId: form.categoryId,
       supplierId: form.supplierId,
-      unitPrice: form.unitPrice,
-      costPrice: form.costPrice,
+      price: form.price,
+      cost: form.cost,
       safetyStock: form.safetyStock,
       maxStock: form.maxStock,
       shelfLocation: form.shelfLocation,
+      images,
     }
 
     if (isEdit.value) {
@@ -624,6 +719,15 @@ async function handleStockOutSubmit() {
   } finally {
     stockSubmitLoading.value = false
   }
+}
+
+// ==================== 详情抽屉 ====================
+const detailDrawerVisible = ref(false)
+const detailRow = ref<Part | null>(null)
+
+function handleDetail(row: Part) {
+  detailRow.value = row
+  detailDrawerVisible.value = true
 }
 
 // ==================== 生命周期 ====================

@@ -1,88 +1,105 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WsGateway } from '../ws/ws.gateway';
 import { PaginatedResult } from '../../common/dto/pagination.dto';
 import {
   CreatePaymentDto,
+  UpdatePaymentDto,
   CreateReceivableDto,
   CreateExpenseDto,
   PaymentQueryDto,
   ReceivableQueryDto,
   ExpenseQueryDto,
   ProfitSummaryQueryDto,
+  CreatePayableDto,
+  PayableQueryDto,
+  UpdateExpenseDto,
+  UpdateReceivableDto,
+  UpdatePayableDto,
 } from './dto/finance.dto';
 
 @Injectable()
 export class FinanceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private wsGateway?: WsGateway,
+  ) {}
 
   // ==================== 收银管理 ====================
 
   /**
-   * 生成支付单号: PAO + 年月日 + - + 4位序号
-   */
-  private async generatePaymentNo(): Promise<string> {
-    const now = new Date();
-    const dateStr =
-      now.getFullYear().toString() +
-      String(now.getMonth() + 1).padStart(2, '0') +
-      String(now.getDate()).padStart(2, '0');
-
-    // 查询当天最后一笔支付记录
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-
-    const lastRecord = await this.prisma.paymentRecord.findFirst({
-      where: {
-        createdAt: {
-          gte: todayStart,
-          lt: todayEnd,
-        },
-      },
-      orderBy: { id: 'desc' },
-    });
-
-    const seq = lastRecord ? (lastRecord.id % 10000) + 1 : 1;
-    const seqStr = String(seq).padStart(4, '0');
-    return `PAO${dateStr}-${seqStr}`;
-  }
-
-  /**
-   * 创建收款记录
+   * 创建收款记录（含事务保护）
    */
   async createPayment(dto: CreatePaymentDto) {
-    const paymentNo = await this.generatePaymentNo();
+    return this.prisma.$transaction(async (tx) => {
+      // 在事务内生成支付单号：PAO + 年月日 + - + 4位序号（按当天已有数量+1，与ID解耦）
+      const now = new Date();
+      const dateStr =
+        now.getFullYear().toString() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0');
 
-    const payment = await this.prisma.paymentRecord.create({
-      data: {
-        paymentNo,
-        customerId: dto.customerId,
-        repairOrderId: dto.repairOrderId ?? null,
-        salesOrderId: dto.salesOrderId ?? null,
-        type: dto.type,
-        amount: dto.amount,
-        paymentMethod: dto.paymentMethod,
-        discount: dto.discount ?? 0,
-        operatorId: dto.operatorId,
-        remark: dto.remark ?? null,
-        status: 'completed',
-      },
-      include: {
-        customer: true,
-        repairOrder: true,
-      },
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const todayCount = await tx.paymentRecord.count({
+        where: {
+          createdAt: {
+            gte: todayStart,
+            lt: todayEnd,
+          },
+        },
+      });
+
+      const seq = String(todayCount + 1).padStart(4, '0');
+      const paymentNo = `PAO${dateStr}-${seq}`;
+
+      const payment = await tx.paymentRecord.create({
+        data: {
+          paymentNo,
+          customerId: dto.customerId,
+          repairOrderId: dto.repairOrderId ?? null,
+          salesOrderId: dto.salesOrderId ?? null,
+          type: dto.type,
+          amount: dto.amount,
+          paymentMethod: dto.paymentMethod,
+          discount: dto.discount ?? 0,
+          operatorId: dto.operatorId,
+          remark: dto.remark ?? null,
+          status: 'completed',
+        },
+        include: {
+          customer: true,
+          repairOrder: true,
+        },
+      });
+
+      // 更新客户累计消费和到店次数
+      await tx.customer.update({
+        where: { id: dto.customerId },
+        data: {
+          totalSpent: { increment: dto.amount },
+          visitCount: { increment: 1 },
+          lastVisitAt: new Date(),
+        },
+      });
+
+      return payment;
+    }).then(async (payment) => {
+      // WebSocket 推送新收款通知
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: dto.customerId },
+        select: { name: true },
+      });
+      this.wsGateway?.notifyNewPayment({
+        paymentId: payment.id,
+        paymentNo: payment.paymentNo,
+        customerName: customer?.name || '-',
+        amount: Number(payment.amount),
+        type: payment.type,
+      });
+      return payment;
     });
-
-    // 更新客户累计消费和到店次数
-    await this.prisma.customer.update({
-      where: { id: dto.customerId },
-      data: {
-        totalSpent: { increment: dto.amount },
-        visitCount: { increment: 1 },
-        lastVisitAt: new Date(),
-      },
-    });
-
-    return payment;
   }
 
   /**
@@ -147,6 +164,35 @@ export class FinanceService {
       throw new NotFoundException('收款记录不存在');
     }
     return payment;
+  }
+
+  async updatePayment(id: number, dto: UpdatePaymentDto) {
+    const payment = await this.prisma.paymentRecord.findUnique({ where: { id } });
+    if (!payment) {
+      throw new NotFoundException('收款记录不存在');
+    }
+    return this.prisma.paymentRecord.update({
+      where: { id },
+      data: {
+        amount: dto.amount,
+        paymentMethod: dto.paymentMethod,
+        discount: dto.discount,
+        remark: dto.remark,
+        status: dto.status,
+      },
+      include: {
+        customer: true,
+        repairOrder: true,
+      },
+    });
+  }
+
+  async removePayment(id: number) {
+    const payment = await this.prisma.paymentRecord.findUnique({ where: { id } });
+    if (!payment) {
+      throw new NotFoundException('收款记录不存在');
+    }
+    return this.prisma.paymentRecord.delete({ where: { id } });
   }
 
   /**
@@ -219,6 +265,22 @@ export class FinanceService {
   }
 
   /**
+   * 查询单条应收记录
+   */
+  async findReceivableOne(id: number) {
+    const receivable = await this.prisma.receivable.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+      },
+    });
+    if (!receivable) {
+      throw new NotFoundException('应收记录不存在');
+    }
+    return receivable;
+  }
+
+  /**
    * 创建应收
    */
   async createReceivable(dto: CreateReceivableDto) {
@@ -241,7 +303,7 @@ export class FinanceService {
   /**
    * 还款
    */
-  async payReceivable(id: number, amount: number) {
+  async payReceivable(id: number, amount: number, payMethod?: string, remark?: string) {
     const receivable = await this.prisma.receivable.findUnique({
       where: { id },
     });
@@ -261,16 +323,76 @@ export class FinanceService {
 
     const status = newPaidAmount >= totalAmount ? 'paid' : 'pending';
 
-    return this.prisma.receivable.update({
+    // 同时创建一条收款记录，关联到该应收记录
+    const updateData: any = {
+      paidAmount: newPaidAmount,
+      status,
+    };
+
+    const updated = await this.prisma.receivable.update({
       where: { id },
-      data: {
-        paidAmount: newPaidAmount,
-        status,
-      },
+      data: updateData,
       include: {
         customer: true,
       },
     });
+
+    // WebSocket 推送应收还款通知
+    this.wsGateway?.notifyReceivablePaid({
+      receivableId: id,
+      customerName: updated.customer?.name || '-',
+      amount,
+    });
+
+    // 记录还款操作，paymentRecord 没有 receivableId，用 remark 记录
+    if (payMethod) {
+      await this.prisma.paymentRecord.create({
+        data: {
+          paymentNo: `RPAY${Date.now()}`,
+          customerId: receivable.customerId,
+          type: 'repay',
+          amount: amount,
+          paymentMethod: payMethod,
+          discount: 0,
+          operatorId: 0,
+          remark: remark || `应收还款 #${id}`,
+          status: 'completed',
+        },
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * 编辑应收
+   */
+  async updateReceivable(id: number, dto: UpdateReceivableDto) {
+    const receivable = await this.prisma.receivable.findUnique({ where: { id } });
+    if (!receivable) {
+      throw new NotFoundException('应收记录不存在');
+    }
+    return this.prisma.receivable.update({
+      where: { id },
+      data: {
+        amount: dto.amount,
+        source: dto.source,
+        sourceNo: dto.sourceNo,
+        status: dto.status,
+      },
+      include: { customer: true },
+    });
+  }
+
+  /**
+   * 删除应收
+   */
+  async deleteReceivable(id: number) {
+    const receivable = await this.prisma.receivable.findUnique({ where: { id } });
+    if (!receivable) {
+      throw new NotFoundException('应收记录不存在');
+    }
+    return this.prisma.receivable.delete({ where: { id } });
   }
 
   /**
@@ -303,6 +425,195 @@ export class FinanceService {
       overdueCount: receivables.filter(
         (r) => r.dueDate && new Date(r.dueDate) < now && r.status === 'pending',
       ).length,
+    };
+  }
+
+  // ==================== 应付账款 ====================
+
+  /**
+   * 应付列表（支持筛选）
+   */
+  async findAllPayables(query: PayableQueryDto) {
+    const where: any = {};
+
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.supplierId) {
+      where.supplierId = query.supplierId;
+    }
+    if (query.startDate || query.endDate) {
+      where.dueDate = {};
+      if (query.startDate) {
+        where.dueDate.gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        where.dueDate.lte = new Date(query.endDate + ' 23:59:59');
+      }
+    }
+
+    const [list, total] = await Promise.all([
+      this.prisma.payable.findMany({
+        where,
+        skip: query.skip,
+        take: query.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          supplier: {
+            select: { id: true, name: true },
+          },
+        },
+      }),
+      this.prisma.payable.count({ where }),
+    ]);
+
+    return new PaginatedResult(list, total, query.page!, query.pageSize!);
+  }
+
+  /**
+   * 应付详情
+   */
+  async findPayableOne(id: number) {
+    const payable = await this.prisma.payable.findUnique({
+      where: { id },
+      include: {
+        supplier: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+    if (!payable) {
+      throw new NotFoundException('应付记录不存在');
+    }
+    return payable;
+  }
+
+  /**
+   * 创建应付
+   */
+  async createPayable(dto: CreatePayableDto) {
+    return this.prisma.payable.create({
+      data: {
+        supplierId: dto.supplierId,
+        amount: dto.amount,
+        paidAmount: 0,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        status: 'pending',
+        source: dto.source,
+        sourceNo: dto.sourceNo,
+      },
+      include: {
+        supplier: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * 还款（支付应付）
+   */
+  async payPayable(id: number, amount: number) {
+    const payable = await this.prisma.payable.findUnique({
+      where: { id },
+    });
+    if (!payable) {
+      throw new NotFoundException('应付记录不存在');
+    }
+    if (payable.status === 'paid') {
+      throw new BadRequestException('该应付已结清');
+    }
+
+    const newPaidAmount = Number(payable.paidAmount) + amount;
+    const totalAmount = Number(payable.amount);
+
+    if (newPaidAmount > totalAmount) {
+      throw new BadRequestException('付款金额超出应付金额');
+    }
+
+    const status = newPaidAmount >= totalAmount ? 'paid' : 'pending';
+
+    const updated = await this.prisma.payable.update({
+      where: { id },
+      data: {
+        paidAmount: newPaidAmount,
+        status,
+      },
+      include: {
+        supplier: {
+          select: { id: true, name: true },
+        },
+      },
+    });
+
+    // WebSocket 推送应付付款通知
+    this.wsGateway?.notifyPayablePaid({
+      payableId: id,
+      supplierName: updated.supplier?.name || '-',
+      amount,
+    });
+
+    return updated;
+  }
+
+  /**
+   * 编辑应付
+   */
+  async updatePayable(id: number, dto: UpdatePayableDto) {
+    const payable = await this.prisma.payable.findUnique({ where: { id } });
+    if (!payable) {
+      throw new NotFoundException('应付记录不存在');
+    }
+    return this.prisma.payable.update({
+      where: { id },
+      data: {
+        amount: dto.amount,
+        source: dto.source,
+        sourceNo: dto.sourceNo,
+        status: dto.status,
+      },
+      include: {
+        supplier: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  /**
+   * 删除应付
+   */
+  async deletePayable(id: number) {
+    const payable = await this.prisma.payable.findUnique({ where: { id } });
+    if (!payable) {
+      throw new NotFoundException('应付记录不存在');
+    }
+    return this.prisma.payable.delete({ where: { id } });
+  }
+
+  /**
+   * 应付汇总统计
+   */
+  async getPayableSummary() {
+    const [aggregation, pendingCount] = await Promise.all([
+      this.prisma.payable.aggregate({
+        _sum: {
+          amount: true,
+          paidAmount: true,
+        },
+      }),
+      this.prisma.payable.count({
+        where: { status: 'pending' },
+      }),
+    ]);
+
+    const totalAmount = Number(aggregation._sum.amount ?? 0);
+    const totalPaid = Number(aggregation._sum.paidAmount ?? 0);
+    const totalUnpaid = totalAmount - totalPaid;
+
+    return {
+      totalAmount: Math.round(totalAmount * 100) / 100,
+      totalPaid: Math.round(totalPaid * 100) / 100,
+      totalUnpaid: Math.round(totalUnpaid * 100) / 100,
+      pendingCount,
     };
   }
 
@@ -352,6 +663,35 @@ export class FinanceService {
     ]);
 
     return new PaginatedResult(list, total, query.page!, query.pageSize!);
+  }
+
+  /**
+   * 编辑费用
+   */
+  async updateExpense(id: number, dto: UpdateExpenseDto) {
+    const expense = await this.prisma.expenseRecord.findUnique({ where: { id } });
+    if (!expense) {
+      throw new NotFoundException('费用记录不存在');
+    }
+    return this.prisma.expenseRecord.update({
+      where: { id },
+      data: {
+        category: dto.category,
+        amount: dto.amount,
+        description: dto.description,
+      },
+    });
+  }
+
+  /**
+   * 删除费用
+   */
+  async deleteExpense(id: number) {
+    const expense = await this.prisma.expenseRecord.findUnique({ where: { id } });
+    if (!expense) {
+      throw new NotFoundException('费用记录不存在');
+    }
+    return this.prisma.expenseRecord.delete({ where: { id } });
   }
 
   /**
@@ -462,7 +802,7 @@ export class FinanceService {
     const netProfit = grossProfit - totalExpense;
 
     return {
-      totalIncome: Math.round(totalIncome * 100) / 100,
+      totalRevenue: Math.round(totalIncome * 100) / 100,
       totalCost: Math.round(totalCost * 100) / 100,
       grossProfit: Math.round(grossProfit * 100) / 100,
       totalExpense: Math.round(totalExpense * 100) / 100,
@@ -493,14 +833,14 @@ export class FinanceService {
     });
 
     // 按天汇总
-    const dailyMap: Record<string, { revenue: number; count: number }> = {};
+    const dailyMap: Record<string, { revenue: number; cost: number; count: number }> = {};
 
     // 初始化所有日期
     for (let i = 0; i < days; i++) {
       const d = new Date(startDate);
       d.setDate(d.getDate() + i);
       const key = d.toISOString().split('T')[0];
-      dailyMap[key] = { revenue: 0, count: 0 };
+      dailyMap[key] = { revenue: 0, cost: 0, count: 0 };
     }
 
     for (const p of payments) {
@@ -511,9 +851,24 @@ export class FinanceService {
       }
     }
 
+    // 同期拉取费用（ExpenseRecord）
+    const expenses = await this.prisma.expenseRecord.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    });
+    for (const e of expenses) {
+      const key = e.createdAt.toISOString().split('T')[0];
+      if (dailyMap[key]) {
+        dailyMap[key].cost += Number(e.amount);
+      }
+    }
+
     return Object.entries(dailyMap).map(([date, data]) => ({
       date,
       revenue: Math.round(data.revenue * 100) / 100,
+      cost: Math.round(data.cost * 100) / 100,
+      profit: Math.round((data.revenue - data.cost) * 100) / 100,
       count: data.count,
     }));
   }

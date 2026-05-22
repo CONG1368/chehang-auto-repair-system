@@ -18,10 +18,14 @@
               value-format="YYYY-MM-DD"
               @change="fetchDailyReport"
             />
-            <el-button type="primary" plain @click="handleExport" style="margin-left: 12px">
+            <el-button type="primary" plain @click="handleExportExcel" style="margin-left: 12px">
               <el-icon><Download /></el-icon>
               导出Excel
             </el-button>
+            <el-button type="warning" plain @click="handlePrint" style="margin-left: 8px">
+              🖨️ 打印
+            </el-button>
+            <el-button @click="handleExportPdf" style="margin-left: 8px">📄 导出PDF</el-button>
           </div>
           <el-table
             v-loading="dailyLoading"
@@ -86,10 +90,14 @@
             <el-button type="primary" plain @click="fetchWeeklyReport" style="margin-left: 12px">
               查询
             </el-button>
-            <el-button type="primary" plain @click="handleExport" style="margin-left: 8px">
+            <el-button type="primary" plain @click="handleExportExcel" style="margin-left: 8px">
               <el-icon><Download /></el-icon>
               导出Excel
             </el-button>
+            <el-button type="warning" plain @click="handlePrint" style="margin-left: 8px">
+              🖨️ 打印
+            </el-button>
+            <el-button @click="handleExportPdf" style="margin-left: 8px">📄 导出PDF</el-button>
           </div>
           <el-table
             v-loading="weeklyLoading"
@@ -165,10 +173,14 @@
             <el-button type="primary" plain @click="fetchMonthlyReport" style="margin-left: 12px">
               查询
             </el-button>
-            <el-button type="primary" plain @click="handleExport" style="margin-left: 8px">
+            <el-button type="primary" plain @click="handleExportExcel" style="margin-left: 8px">
               <el-icon><Download /></el-icon>
               导出Excel
             </el-button>
+            <el-button type="warning" plain @click="handlePrint" style="margin-left: 8px">
+              🖨️ 打印
+            </el-button>
+            <el-button @click="handleExportPdf" style="margin-left: 8px">📄 导出PDF</el-button>
           </div>
           <el-table
             v-loading="monthlyLoading"
@@ -270,6 +282,7 @@
         border
         stripe
         style="width: 100%"
+        @row-click="handleRowClick"
       >
         <el-table-column prop="paymentNo" label="支付单号" min-width="170" show-overflow-tooltip />
         <el-table-column prop="customerName" label="客户" min-width="100" />
@@ -311,9 +324,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Download } from '@element-plus/icons-vue'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
 import dayjs from 'dayjs'
 
 // ==================== 类型定义 ====================
@@ -328,6 +344,14 @@ interface DailySummaryRow {
   alipayAmount: number
   memberAmount: number
   creditAmount: number
+}
+
+interface DailySummaryBackend {
+  date: string
+  totalRevenue: number
+  totalCount: number
+  byPaymentMethod: Record<string, number>
+  byType: Record<string, number>
 }
 
 interface WeeklySummaryRow {
@@ -352,6 +376,21 @@ interface MonthlySummaryRow {
   alipayAmount: number
   memberAmount: number
   creditAmount: number
+}
+
+function mapDailySummaryBackend(res: DailySummaryBackend, date: string): DailySummaryRow {
+  const pm = res.byPaymentMethod || {}
+  return {
+    date,
+    totalIncome: res.totalRevenue || 0,
+    totalCount: res.totalCount || 0,
+    cashAmount: pm.cash || 0,
+    cardAmount: pm.card || 0,
+    wechatAmount: pm.wechat || 0,
+    alipayAmount: pm.alipay || 0,
+    memberAmount: pm.member || 0,
+    creditAmount: pm.credit || 0,
+  }
 }
 
 interface PaymentRow {
@@ -383,10 +422,10 @@ const fetchDailyReport = async () => {
   if (!dailyDate.value) return
   dailyLoading.value = true
   try {
-    const res = await request.get<any, DailySummaryRow>('/finance/daily-summary', {
+    const res = await request.get<any, DailySummaryBackend>('/finance/daily-summary', {
       params: { date: dailyDate.value },
     })
-    dailyData.value = res ? [res] : []
+    dailyData.value = res ? [mapDailySummaryBackend(res, dailyDate.value)] : []
   } catch {
     dailyData.value = []
   } finally {
@@ -404,17 +443,41 @@ const weeklyPagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const fetchWeeklyReport = async () => {
   weeklyLoading.value = true
   try {
-    const params: any = {
-      page: weeklyPagination.page,
-      pageSize: weeklyPagination.pageSize,
-    }
+    // 计算日期范围内的天数
+    let days = 7 // 默认一周
+    let weekStart = dayjs().startOf('week')
+    let weekEnd = dayjs()
     if (weeklyDateRange.value && weeklyDateRange.value.length === 2) {
-      params.startDate = weeklyDateRange.value[0]
-      params.endDate = weeklyDateRange.value[1]
+      weekStart = dayjs(weeklyDateRange.value[0])
+      weekEnd = dayjs(weeklyDateRange.value[1])
+      days = weekEnd.diff(weekStart, 'day') + 1
     }
-    const res = await request.get<any, ListResponse<WeeklySummaryRow>>('/finance/payments', { params })
-    weeklyData.value = res.list || []
-    weeklyPagination.total = res.total || 0
+
+    // 使用 revenue-trend 接口一次性获取趋势数据
+    const trendRes = await request.get<any, any[]>('/finance/revenue-trend', {
+      params: { days: Math.max(days, 1) },
+    })
+
+    const results: any[] = trendRes || []
+    // 过滤日期范围内的数据
+    const inRange = results.filter((r: any) => {
+      if (!r.date) return false
+      return r.date >= weekStart.format('YYYY-MM-DD') && r.date <= weekEnd.format('YYYY-MM-DD')
+    })
+
+    const aggregated: WeeklySummaryRow = {
+      weekRange: `${weekStart.format('YYYY-MM-DD')} 至 ${weekEnd.format('YYYY-MM-DD')}`,
+      totalIncome: inRange.reduce((s: number, r: any) => s + (r.revenue || 0), 0),
+      totalCount: inRange.reduce((s: number, r: any) => s + (r.count || 0), 0),
+      cashAmount: 0,
+      cardAmount: 0,
+      wechatAmount: 0,
+      alipayAmount: 0,
+      memberAmount: 0,
+      creditAmount: 0,
+    }
+    weeklyData.value = [aggregated]
+    weeklyPagination.total = 1
   } catch {
     weeklyData.value = []
     weeklyPagination.total = 0
@@ -433,17 +496,53 @@ const monthlyPagination = reactive({ page: 1, pageSize: 10, total: 0 })
 const fetchMonthlyReport = async () => {
   monthlyLoading.value = true
   try {
-    const params: any = {
-      page: monthlyPagination.page,
-      pageSize: monthlyPagination.pageSize,
-    }
+    // 计算日期范围内的天数
+    let days = 30 // 默认一个月
+    let monthStart = dayjs().startOf('month')
+    let monthEnd = dayjs()
     if (monthlyDateRange.value && monthlyDateRange.value.length === 2) {
-      params.startDate = monthlyDateRange.value[0]
-      params.endDate = monthlyDateRange.value[1]
+      monthStart = dayjs(monthlyDateRange.value[0] + '-01')
+      monthEnd = dayjs(monthlyDateRange.value[1] + '-01').endOf('month')
+      days = monthEnd.diff(monthStart, 'day') + 1
     }
-    const res = await request.get<any, ListResponse<MonthlySummaryRow>>('/finance/payments', { params })
-    monthlyData.value = res.list || []
-    monthlyPagination.total = res.total || 0
+
+    // 使用 revenue-trend 接口一次性获取趋势数据
+    const trendRes = await request.get<any, any[]>('/finance/revenue-trend', {
+      params: { days: Math.max(days, 1) },
+    })
+
+    const results: any[] = trendRes || []
+
+    // 按月分组聚合
+    const monthMap = new Map<string, MonthlySummaryRow>()
+    for (const r of results) {
+      if (!r.date) continue
+      const monthKey = r.date.substring(0, 7)
+      if (monthStart.isValid() && monthEnd.isValid()) {
+        if (monthKey < monthStart.format('YYYY-MM') || monthKey > monthEnd.format('YYYY-MM')) continue
+      }
+
+      const existing = monthMap.get(monthKey)
+      if (existing) {
+        existing.totalIncome += r.revenue || 0
+        existing.totalCount += r.count || 0
+      } else {
+        monthMap.set(monthKey, {
+          month: monthKey,
+          totalIncome: r.revenue || 0,
+          totalCount: r.count || 0,
+          cashAmount: 0,
+          cardAmount: 0,
+          wechatAmount: 0,
+          alipayAmount: 0,
+          memberAmount: 0,
+          creditAmount: 0,
+        })
+      }
+    }
+
+    monthlyData.value = Array.from(monthMap.values()).sort((a, b) => a.month.localeCompare(b.month))
+    monthlyPagination.total = monthlyData.value.length
   } catch {
     monthlyData.value = []
     monthlyPagination.total = 0
@@ -503,8 +602,50 @@ const fetchPayments = async () => {
 
 // ==================== 导出 ====================
 
-const handleExport = () => {
-  ElMessage.info('导出Excel功能开发中，敬请期待')
+const handleExportExcel = () => {
+  downloadFile('/api/export/excel?module=report', '财务报表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+const handlePrint = () => {
+  window.print()
+}
+
+const reportColumns = [
+  { header: '总收入', dataKey: 'totalIncome' },
+  { header: '总单数', dataKey: 'totalCount' },
+  { header: '现金', dataKey: 'cashAmount' },
+  { header: '刷卡', dataKey: 'cardAmount' },
+  { header: '微信', dataKey: 'wechatAmount' },
+  { header: '支付宝', dataKey: 'alipayAmount' },
+  { header: '会员卡', dataKey: 'memberAmount' },
+  { header: '挂账', dataKey: 'creditAmount' },
+]
+
+const handleExportPdf = () => {
+  if (activeReportTab.value === 'daily') {
+    exportTableToPdf(
+      '日报',
+      [{ header: '日期', dataKey: 'date' }, ...reportColumns],
+      dailyData.value,
+      '对账日报',
+    )
+  } else if (activeReportTab.value === 'weekly') {
+    exportTableToPdf(
+      '周报',
+      [{ header: '周期', dataKey: 'weekRange' }, ...reportColumns],
+      weeklyData.value,
+      '对账周报',
+    )
+  } else if (activeReportTab.value === 'monthly') {
+    exportTableToPdf(
+      '月报',
+      [{ header: '月份', dataKey: 'month' }, ...reportColumns],
+      monthlyData.value,
+      '对账月报',
+    )
+  }
 }
 
 // ==================== 工具函数 ====================
@@ -537,6 +678,20 @@ const getPayMethodTagType = (value: string): string => {
 const formatMoney = (val?: number): string => {
   if (val === undefined || val === null) return '0.00'
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// ==================== 收款明细行点击 ====================
+
+const router = useRouter()
+
+function handleRowClick(row: PaymentRow) {
+  if (row.type === 'repair') {
+    router.push('/repair/orders')
+  } else if (row.type === 'sales') {
+    router.push('/sales/orders')
+  } else if (row.type === 'beauty') {
+    router.push('/beauty/schedule')
+  }
 }
 
 // ==================== 初始化 ====================
@@ -606,5 +761,10 @@ onMounted(() => {
 .amount-total {
   color: #f56c6c;
   font-weight: 600;
+}
+
+@media print {
+  :deep(.el-button) { display: none; }
+  :deep(.el-pagination) { display: none; }
 }
 </style>

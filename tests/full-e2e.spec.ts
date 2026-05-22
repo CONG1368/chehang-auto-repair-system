@@ -24,11 +24,11 @@ async function navigateTo(page: Page, menuText: string, itemText: string) {
   await page.waitForTimeout(500);
 }
 
-test.describe('泰州车行维修厂部综合管理系统 - 全自动化测试', () => {
+test.describe('车行综合管理系统 - 全自动化测试', () => {
 
   test('【1】登录验证', async ({ page }) => {
     await page.goto(`${BASE}/login`);
-    await expect(page).toHaveTitle(/泰州车行维修厂/);
+    await expect(page).toHaveTitle(/车行/);
 
     // 空表单校验
     await page.fill('input[placeholder="用户名"]', '');
@@ -62,6 +62,8 @@ test.describe('泰州车行维修厂部综合管理系统 - 全自动化测试',
     await navigateTo(page, '客户管理', '客户档案');
     await page.waitForURL('**/customer/list');
     await expect(page.locator('.el-table')).toBeVisible({ timeout: 5000 });
+    // 数据验证：表格至少渲染了表头
+    await expect(page.locator('.el-table__header')).toBeVisible({ timeout: 5000 });
   });
 
   test('【4】客户管理 - 新增客户', async ({ page }) => {
@@ -83,6 +85,8 @@ test.describe('泰州车行维修厂部综合管理系统 - 全自动化测试',
     await navigateTo(page, '维修服务', '工单管理');
     await page.waitForURL('**/repair/orders');
     await expect(page.locator('.search-bar').first()).toBeAttached({ timeout: 5000 });
+    // 数据验证：表格存在且有列定义
+    await expect(page.locator('.el-table__header th').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('【6】维修服务 - 接车开单', async ({ page }) => {
@@ -90,6 +94,8 @@ test.describe('泰州车行维修厂部综合管理系统 - 全自动化测试',
     await navigateTo(page, '维修服务', '接车开单');
     await page.waitForURL('**/repair/reception');
     await expect(page.locator('.page-header')).toBeVisible();
+    // 关键表单检查：验证表单有输入框
+    await expect(page.locator('.el-form input, .el-form textarea, input, textarea').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('【7】维修服务 - 技师派工', async ({ page }) => {
@@ -253,6 +259,160 @@ test.describe('泰州车行维修厂部综合管理系统 - 全自动化测试',
     }
     await page.waitForURL('**/login', { timeout: 5000 });
     await expect(page.locator('.login-container')).toBeVisible();
+  });
+
+  test('【32】导航到多个模块后能正常返回首页', async ({ page }) => {
+    await login(page);
+    // 导航到客户管理
+    await navigateTo(page, '客户管理', '客户档案');
+    await page.waitForURL('**/customer/list');
+    // 导航到维修服务
+    await navigateTo(page, '维修服务', '工单管理');
+    await page.waitForURL('**/repair/orders');
+    // 导航到库存管理
+    await navigateTo(page, '库存管理', '配件管理');
+    await page.waitForURL('**/inventory/parts');
+    // 返回首页（通过URL直接跳转）
+    await page.goto(`${BASE}/dashboard`);
+    await page.waitForTimeout(1000);
+    await expect(page.locator('.main-content')).toBeVisible();
+  });
+
+  test('【33】登录→浏览页面→退出登录→验证未登录拦截完整循环', async ({ page }) => {
+    // 1. 登录
+    await login(page);
+    // 2. 验证登录成功，仪表盘可见
+    await expect(page.locator('.main-content')).toBeVisible();
+    // 3. 浏览多个页面
+    await navigateTo(page, '客户管理', '客户档案');
+    await expect(page.locator('.el-table')).toBeVisible({ timeout: 5000 });
+    await navigateTo(page, '财务管理', '收银台');
+    await page.waitForURL('**/finance/cashier');
+    // 4. 退出登录
+    await page.click('.header-right .el-avatar, .header-right .el-dropdown');
+    await page.waitForTimeout(500);
+    const logoutBtn = page.locator('.el-dropdown-menu__item:has-text("退出登录")');
+    if (await logoutBtn.isVisible().catch(() => false)) {
+      await logoutBtn.click();
+    }
+    await page.waitForURL('**/login', { timeout: 5000 });
+    await expect(page.locator('.login-container')).toBeVisible();
+    // 5. 验证未登录状态下无法访问受保护页面（应跳转回登录）
+    await page.goto(`${BASE}/dashboard`);
+    await page.waitForTimeout(2000);
+    // 未登录时应被路由守卫拦截，回退到登录页
+    await expect(page.locator('.login-container')).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 美容服务 ====================
+
+  test('【34】美容服务 - 充值记录', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '美容服务', '充值记录');
+    await page.waitForURL('**/beauty/recharges');
+    await expect(page.locator('.el-table__header')).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 财务管理 ====================
+
+  test('【35】财务管理 - 应付账款', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '财务管理', '应付账款');
+    await page.waitForURL('**/finance/payable');
+    await expect(page.locator('.el-table__header, .search-bar, .page-header').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('【36】财务管理 - 发票管理', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '财务管理', '发票管理');
+    await page.waitForURL('**/finance/invoice');
+    await expect(page.locator('.el-table__header, .search-bar, .page-header').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('【37】财务管理 - 费用管理', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '财务管理', '费用管理');
+    await page.waitForURL('**/finance/expenses');
+    await expect(page.locator('.el-table__header, .search-bar, .page-header').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 数据报表 ====================
+
+  test('【38】数据报表 - 美容统计', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '数据报表', '美容统计');
+    await page.waitForURL('**/report/beauty');
+    await expect(page.locator('.page-header, .main-content, .el-card').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('【39】数据报表 - 员工绩效', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '数据报表', '员工绩效');
+    await page.waitForURL('**/report/performance');
+    await expect(page.locator('.page-header, .main-content, .el-card, .el-tabs').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 系统管理 ====================
+
+  test('【40】系统管理 - 系统设置', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '系统管理', '系统设置');
+    await page.waitForURL('**/system/settings');
+    await expect(page.locator('.el-form, .page-header, .main-content').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('【41】系统管理 - 操作日志', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '系统管理', '操作日志');
+    await page.waitForURL('**/system/logs');
+    await expect(page.locator('.el-table__header, .search-bar, .page-header').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('【42】系统管理 - 个人设置', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '系统管理', '个人设置');
+    await page.waitForURL('**/system/profile');
+    await expect(page.locator('.el-form, .page-header, .main-content').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 通知 ====================
+
+  test('【43】消息通知 - 铃铛下拉', async ({ page }) => {
+    await login(page);
+    // 点击顶部铃铛图标
+    const bell = page.locator('.bell-icon').first();
+    await bell.click();
+    await page.waitForTimeout(500);
+    // 弹出下拉面板（popover）
+    await expect(page.locator('.notification-popover, .el-popover, .el-popper').first()).toBeVisible({ timeout: 3000 });
+  });
+
+  // ==================== 导出功能 ====================
+
+  test('【44】导出功能 - 报表页导出按钮', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '数据报表', '销售分析');
+    await page.waitForURL('**/report/sales');
+    // 检查导出按钮存在
+    const exportBtn = page.locator('button').filter({ hasText: /导出Excel|导出PDF/ }).first();
+    await expect(exportBtn).toBeVisible({ timeout: 5000 });
+  });
+
+  // ==================== 打印功能 ====================
+
+  test('【45】打印功能 - 维修工单打印按钮', async ({ page }) => {
+    await login(page);
+    await navigateTo(page, '维修服务', '工单管理');
+    await page.waitForURL('**/repair/orders');
+    // 点击第一行的查看详情
+    const viewBtn = page.locator('.el-table__body .el-button').filter({ hasText: /详情|查看/ }).first();
+    if (await viewBtn.isVisible()) {
+      await viewBtn.click();
+      await page.waitForTimeout(800);
+      // 检查抽屉中是否有打印按钮
+      const printBtn = page.locator('button').filter({ hasText: /打印/ }).first();
+      await expect(printBtn).toBeVisible({ timeout: 3000 });
+    }
   });
 
 });

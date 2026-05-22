@@ -143,6 +143,13 @@
               />
             </el-form-item>
 
+            <el-form-item label="故障照片">
+              <el-upload multiple drag :auto-upload="false" :on-change="handleFileChange" :file-list="fileList" accept="image/*">
+                <el-icon :size="32"><UploadFilled /></el-icon>
+                <div>拖拽或点击上传故障部位照片</div>
+              </el-upload>
+            </el-form-item>
+
             <!-- 维修项目列表 -->
             <el-divider content-position="left">
               维修项目
@@ -355,11 +362,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from 'vue'
+import { ref, reactive, watch, computed, onMounted, h, createApp } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { Delete } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Delete, UploadFilled } from '@element-plus/icons-vue'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { printHtml } from '@/utils/print'
+import ReceptionPrint from '@/components/PrintTemplate/ReceptionPrint.vue'
+
+/** 递归深度转义对象中所有字符串值（防御纵深，配合 Vue {{ }} 模板转义） */
+function deepEscape(data: any): any {
+  if (typeof data === 'string') return String(data)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+  if (Array.isArray(data)) return data.map(deepEscape)
+  if (data !== null && typeof data === 'object') {
+    const result: Record<string, any> = {}
+    for (const key of Object.keys(data)) {
+      result[key] = deepEscape(data[key])
+    }
+    return result
+  }
+  return data
+}
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -448,6 +477,14 @@ const rules = reactive<FormRules>({
 const showNewCustomerForm = ref(false)
 const showNewVehicleForm = ref(false)
 const submitting = ref(false)
+
+// ==================== 文件上传 ====================
+const fileList = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
+
+function handleFileChange(file: any) {
+  pendingFiles.value.push(file.raw)
+}
 
 // 客户搜索
 const customerLoading = ref(false)
@@ -630,6 +667,12 @@ async function handleSubmit() {
       estimatedCompletion: form.estimatedCompletion,
     }
 
+    // 上传故障照片
+    if (pendingFiles.value.length > 0) {
+      const urls = await uploadFiles(pendingFiles.value, 'repair')
+      payload.images = urls
+    }
+
     // 客户信息
     if (showNewCustomerForm.value) {
       payload.newCustomer = {
@@ -653,12 +696,51 @@ async function handleSubmit() {
       payload.vehicleId = form.vehicleId
     }
 
-    await request.post('/repair', payload)
+    const result = await request.post('/repair', payload) as any
 
     ElMessage.success('工单创建成功！')
+
+    // 询问是否打印接车单
     setTimeout(() => {
+      ElMessageBox.confirm(
+        '接车单已创建，是否打印？',
+        '打印确认',
+        {
+          confirmButtonText: '打印',
+          cancelButtonText: '暂不打印',
+          type: 'info',
+        },
+      )
+        .then(async () => {
+          const orderNo = result?.orderNo || result?.data?.orderNo || ''
+          const selectedVehicle = form.vehicleId
+            ? customerVehicles.value.find(v => (v as any).id === form.vehicleId)
+            : null
+          const printData = {
+            orderNo,
+            customerName: selectedCustomer.value?.name || form.newCustomerName || '-',
+            customerPhone: selectedCustomer.value?.phone || form.newCustomerPhone || '-',
+            plateNumber: form.newVehiclePlate || (selectedVehicle as any)?.plateNumber || '-',
+            vehicleModel: form.newVehicleModel || (selectedVehicle as any)?.model || '-',
+            mileage: form.newVehicleMileage || (selectedVehicle as any)?.mileage || 0,
+            serviceAdvisor: advisorOptions.value.find(a => a.id === form.advisorId)?.realName || '-',
+            faultDesc: form.faultDescription,
+            estCompleteTime: form.estimatedCompletion,
+            createTime: new Date().toISOString(),
+          }
+          const container = document.createElement('div')
+          const safeData = deepEscape(printData)
+          const app = createApp({ render: () => h(ReceptionPrint, { data: safeData }) })
+          app.mount(container)
+          await new Promise(r => setTimeout(r, 100))
+          printHtml(container.innerHTML)
+          app.unmount()
+        })
+        .catch(() => {
+          // 用户取消打印
+        })
       router.push({ name: 'RepairOrders' })
-    }, 800)
+    }, 300)
   } catch {
     // 错误已在拦截器处理
   } finally {

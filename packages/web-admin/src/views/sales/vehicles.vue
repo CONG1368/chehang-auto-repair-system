@@ -49,6 +49,9 @@
         <el-button type="success" style="margin-left: auto" @click="handleAdd">
           新增车辆
         </el-button>
+        <el-button type="primary" style="margin-left: 12px" @click="handleExport">
+          <el-icon><Download /></el-icon>导出Excel
+        </el-button>
       </div>
 
       <!-- 表格 -->
@@ -58,6 +61,7 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleDetail"
       >
         <el-table-column prop="brand" label="品牌" min-width="100" />
         <el-table-column prop="series" label="车系" min-width="120" />
@@ -84,8 +88,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               编辑
             </el-button>
@@ -217,6 +224,12 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="车辆照片">
+          <el-upload multiple drag :auto-upload="false" :on-change="handleFileChange" :file-list="fileList" accept="image/*">
+            <el-icon :size="32"><UploadFilled /></el-icon>
+            <div>拖拽或点击批量上传</div>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -225,14 +238,47 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="detailDrawerVisible"
+      title="车辆详情"
+      size="500px"
+      :close-on-click-modal="true"
+    >
+      <template v-if="detailRow">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="品牌">{{ detailRow.brand }}</el-descriptions-item>
+          <el-descriptions-item label="车系">{{ detailRow.series }}</el-descriptions-item>
+          <el-descriptions-item label="车型">{{ detailRow.model }}</el-descriptions-item>
+          <el-descriptions-item label="年款">{{ detailRow.year }}</el-descriptions-item>
+          <el-descriptions-item label="配置">{{ detailRow.config || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="颜色">{{ detailRow.color }}</el-descriptions-item>
+          <el-descriptions-item label="VIN码">{{ detailRow.vin || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="库存状态">
+            <el-tag :type="stockStatusType(detailRow.stockStatus)" size="small">
+              {{ detailRow.stockStatus || '-' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="指导价">&yen;{{ detailRow.guidePrice != null ? Number(detailRow.guidePrice).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="销售价">&yen;{{ detailRow.salePrice != null ? Number(detailRow.salePrice).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="最低价">&yen;{{ detailRow.minPrice != null ? Number(detailRow.minPrice).toLocaleString() : '-' }}</el-descriptions-item>
+          <el-descriptions-item label="库位">{{ detailRow.storageLocation || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间" :span="2">{{ detailRow.createdAt }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled, Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { downloadFile } from '@/utils/download'
 
 // ==================== 类型定义 ====================
 interface Vehicle {
@@ -309,6 +355,14 @@ const initForm = (): VehicleForm => ({
 
 const form = reactive<VehicleForm>(initForm())
 
+// ==================== 文件上传 ====================
+const fileList = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
+
+function handleFileChange(file: any) {
+  pendingFiles.value.push(file.raw)
+}
+
 // ==================== 表单校验 ====================
 const formRules: FormRules = {
   brand: [{ required: true, message: '请输入品牌', trigger: 'blur' }],
@@ -365,11 +419,20 @@ function handleReset() {
   handleSearch()
 }
 
+/** 导出 */
+function handleExport() {
+  downloadFile('/api/export/excel?module=vehicles', '车辆信息.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
 /** 新增 */
 function handleAdd() {
   isEdit.value = false
   currentId.value = null
   Object.assign(form, initForm())
+  fileList.value = []
+  pendingFiles.value = []
   dialogVisible.value = true
 }
 
@@ -389,12 +452,16 @@ function handleEdit(row: Vehicle) {
   form.minPrice = row.minPrice
   form.stockStatus = row.stockStatus
   form.storageLocation = row.storageLocation
+  fileList.value = []
+  pendingFiles.value = []
   dialogVisible.value = true
 }
 
 /** 弹窗关闭后清理验证 */
 function handleDialogClosed() {
   formRef.value?.resetFields()
+  fileList.value = []
+  pendingFiles.value = []
 }
 
 /** 提交表单 */
@@ -404,7 +471,13 @@ async function handleSubmit() {
 
   submitLoading.value = true
   try {
-    const payload = { ...form }
+    const payload: Record<string, any> = { ...form }
+
+    // 上传车辆图片
+    if (pendingFiles.value.length > 0) {
+      const urls = await uploadFiles(pendingFiles.value, 'vehicles')
+      payload.images = urls
+    }
 
     if (isEdit.value) {
       await request.put(`/sales/vehicles/${currentId.value}`, payload)
@@ -446,6 +519,15 @@ function handleDelete(row: Vehicle) {
     .catch(() => {
       // 用户取消
     })
+}
+
+// ==================== 详情抽屉 ====================
+const detailDrawerVisible = ref(false)
+const detailRow = ref<Vehicle | null>(null)
+
+function handleDetail(row: Vehicle) {
+  detailRow.value = row
+  detailDrawerVisible.value = true
 }
 
 // ==================== 生命周期 ====================

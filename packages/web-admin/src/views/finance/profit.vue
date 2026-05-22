@@ -24,6 +24,9 @@
           <el-radio-button value="last3Months">近3个月</el-radio-button>
           <el-radio-button value="thisYear">今年</el-radio-button>
         </el-radio-group>
+        <el-button type="success" style="margin-left: auto" @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf" style="margin-left: 8px">📄 导出PDF</el-button>
+        <el-button type="warning" style="margin-left: 8px" @click="handlePrint">🖨️ 打印</el-button>
       </div>
     </el-card>
 
@@ -178,8 +181,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
 import dayjs from 'dayjs'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -198,7 +204,7 @@ interface ProfitSummary {
   grossProfit: number
   totalExpense: number
   netProfit: number
-  revenueComposition?: {
+  incomeByType?: {
     repair: number
     sales: number
     beauty: number
@@ -272,23 +278,8 @@ const profitData = reactive<ProfitSummary>({
   grossProfit: 0,
   totalExpense: 0,
   netProfit: 0,
-  revenueComposition: { repair: 0, sales: 0, beauty: 0 },
+  incomeByType: { repair: 0, sales: 0, beauty: 0 },
 })
-
-const mockProfitData = () => {
-  Object.assign(profitData, {
-    totalRevenue: 285600,
-    totalCost: 168400,
-    grossProfit: 117200,
-    totalExpense: 45200,
-    netProfit: 72000,
-    revenueComposition: {
-      repair: 165800,
-      sales: 78000,
-      beauty: 41800,
-    },
-  })
-}
 
 const fetchProfitSummary = async () => {
   try {
@@ -302,14 +293,15 @@ const fetchProfitSummary = async () => {
       Object.assign(profitData, res)
     }
   } catch {
-    mockProfitData()
+    // 保留上一次的数据，不覆盖为 Mock 假数据
+    ElMessage.warning('利润汇总数据加载失败，显示的是上一次缓存数据')
   }
 }
 
 // ==================== 收入构成饼图 ====================
 
 const pieChartOption = computed(() => {
-  const comp = profitData.revenueComposition
+  const comp = profitData.incomeByType
   if (!comp) return null
 
   const data = [
@@ -370,20 +362,6 @@ const pieChartOption = computed(() => {
 
 const trendData = ref<RevenueTrendItem[]>([])
 
-const mockTrendData = () => {
-  const data: RevenueTrendItem[] = []
-  for (let i = 29; i >= 0; i--) {
-    const date = dayjs().subtract(i, 'day').format('MM-DD')
-    data.push({
-      date,
-      revenue: Math.round(5000 + Math.random() * 15000),
-      cost: Math.round(3000 + Math.random() * 8000),
-      profit: Math.round(1000 + Math.random() * 7000),
-    })
-  }
-  trendData.value = data
-}
-
 const fetchRevenueTrend = async () => {
   try {
     const res = await request.get<any, RevenueTrendItem[]>('/finance/revenue-trend', {
@@ -391,11 +369,11 @@ const fetchRevenueTrend = async () => {
     })
     if (res && Array.isArray(res) && res.length > 0) {
       trendData.value = res
-    } else {
-      mockTrendData()
     }
+    // 如果返回空数组，保留上一次的数据
   } catch {
-    mockTrendData()
+    // 保留上一次的数据，不覆盖为 Mock 假数据
+    ElMessage.warning('趋势数据加载失败，显示的是上一次缓存数据')
   }
 }
 
@@ -514,20 +492,6 @@ const filteredExpenseList = computed(() => {
   )
 })
 
-const mockExpenses = () => {
-  expenseList.value = [
-    { id: 1, category: '人工成本', amount: 18000, description: '5月份技师工资', createTime: '2026-05-15 18:30' },
-    { id: 2, category: '房租', amount: 8500, description: '5月场地租金', createTime: '2026-05-01 09:00' },
-    { id: 3, category: '水电费', amount: 3200, description: '4月水电费结算', createTime: '2026-05-10 14:00' },
-    { id: 4, category: '设备维护', amount: 4500, description: '举升机维修保养', createTime: '2026-05-08 10:30' },
-    { id: 5, category: '办公耗材', amount: 1200, description: '打印纸、墨盒等办公用品', createTime: '2026-05-12 16:00' },
-    { id: 6, category: '营销推广', amount: 6800, description: '抖音推广、美团平台费', createTime: '2026-05-06 11:00' },
-    { id: 7, category: '保险', amount: 2000, description: '门店财产险', createTime: '2026-05-03 08:30' },
-    { id: 8, category: '其他', amount: 1000, description: '员工团建活动费用', createTime: '2026-05-18 17:00' },
-  ]
-  expensePagination.total = 8
-}
-
 const fetchExpenses = async () => {
   expenseLoading.value = true
   try {
@@ -540,11 +504,11 @@ const fetchExpenses = async () => {
     if (res && res.list) {
       expenseList.value = res.list
       expensePagination.total = res.total
-    } else {
-      mockExpenses()
     }
+    // 如果返回空列表，保留上一次的数据
   } catch {
-    mockExpenses()
+    // 保留上一次的数据，不覆盖为 Mock 假数据
+    ElMessage.warning('费用明细加载失败，显示的是上一次缓存数据')
   } finally {
     expenseLoading.value = false
   }
@@ -562,6 +526,38 @@ const getExpenseTagType = (category: string): string => {
     其他: 'info',
   }
   return map[category] || 'info'
+}
+
+// ==================== 导出 ====================
+
+const handleExportExcel = () => {
+  downloadFile('/api/export/excel?module=report', '利润报表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+const handlePrint = () => {
+  window.print()
+}
+
+const handleExportPdf = () => {
+  // 导出利润汇总 + 费用明细
+  const data = [
+    { 指标: '总收入', 金额: `¥${formatMoney(profitData.totalRevenue)}` },
+    { 指标: '总成本', 金额: `¥${formatMoney(profitData.totalCost)}` },
+    { 指标: '毛利', 金额: `¥${formatMoney(profitData.grossProfit)}` },
+    { 指标: '费用', 金额: `¥${formatMoney(profitData.totalExpense)}` },
+    { 指标: '净利润', 金额: `¥${formatMoney(profitData.netProfit)}` },
+  ]
+  exportTableToPdf(
+    '利润分析报表',
+    [
+      { header: '指标', dataKey: '指标' },
+      { header: '金额', dataKey: '金额' },
+    ],
+    data,
+    '利润报表',
+  )
 }
 
 // ==================== 工具函数 ====================
@@ -679,5 +675,10 @@ onMounted(() => {
 .amount-total {
   color: #f56c6c;
   font-weight: 600;
+}
+
+@media print {
+  :deep(.el-button) { display: none; }
+  :deep(.el-pagination) { display: none; }
 }
 </style>

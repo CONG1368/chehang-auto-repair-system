@@ -13,6 +13,7 @@
             border
             stripe
             style="width: 100%"
+            @row-click="handleView"
           >
             <el-table-column prop="orderNo" label="工单号" min-width="140" />
             <el-table-column prop="plateNo" label="车牌" min-width="100" />
@@ -27,12 +28,15 @@
                 &yen;{{ row.estimatedAmount?.toFixed(2) ?? '0.00' }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="160" fixed="right">
+            <el-table-column label="操作" width="210" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="handleQualityCheck(row)">
+                <el-button link type="info" size="small" @click.stop="handleView(row)">
+                  查看
+                </el-button>
+                <el-button link type="primary" size="small" @click.stop="handleQualityCheck(row)">
                   质检
                 </el-button>
-                <el-button link type="success" size="small" @click="handleDeliver(row)">
+                <el-button link type="success" size="small" @click.stop="handleDeliver(row)">
                   交车
                 </el-button>
               </template>
@@ -60,6 +64,7 @@
             border
             stripe
             style="width: 100%"
+            @row-click="handleView"
           >
             <el-table-column prop="orderNo" label="工单号" min-width="140" />
             <el-table-column prop="plateNo" label="车牌" min-width="100" />
@@ -84,6 +89,13 @@
             <el-table-column label="备注" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.qualityRemark ?? '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="info" size="small" @click.stop="handleView(row)">
+                  查看
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -154,6 +166,12 @@
             <el-radio value="fail">不通过</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="质检照片">
+          <el-upload multiple drag :auto-upload="false" :on-change="handleFileChange" :file-list="fileList" accept="image/*">
+            <el-icon :size="32"><UploadFilled /></el-icon>
+            <div>拖拽或点击上传质检照片</div>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="qualityDialogVisible = false">取消</el-button>
@@ -215,14 +233,75 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 查看详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="工单详情"
+      direction="rtl"
+      size="500px"
+    >
+      <template v-if="detailOrder">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="工单号">{{ detailOrder.orderNo }}</el-descriptions-item>
+          <el-descriptions-item label="车牌号">{{ detailOrder.plateNo }}</el-descriptions-item>
+          <el-descriptions-item label="客户">{{ detailOrder.customerName }}</el-descriptions-item>
+          <el-descriptions-item label="维修项目">{{ detailOrder.repairItems ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="预计金额">&yen;{{ detailOrder.estimatedAmount?.toFixed(2) ?? '0.00' }}</el-descriptions-item>
+          <el-descriptions-item label="维修技师">{{ detailOrder.technicianName ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="工单状态">
+            <el-tag size="small">{{ statusLabel(detailOrder.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="质检结论" v-if="detailOrder.qualityResult">
+            <el-tag :type="detailOrder.qualityResult === 'pass' ? 'success' : 'danger'" size="small">
+              {{ detailOrder.qualityResult === 'pass' ? '通过' : '不通过' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="质检人" v-if="detailOrder.qualityCheckerName">{{ detailOrder.qualityCheckerName }}</el-descriptions-item>
+          <el-descriptions-item label="质检时间" v-if="detailOrder.qualityCheckAt">{{ detailOrder.qualityCheckAt }}</el-descriptions-item>
+          <el-descriptions-item label="质检备注" v-if="detailOrder.qualityRemark">{{ detailOrder.qualityRemark }}</el-descriptions-item>
+          <el-descriptions-item label="交车状态">
+            <el-tag :type="detailOrder.deliveredAt ? 'success' : 'warning'" size="small">
+              {{ detailOrder.deliveredAt ? '已交车' : '未交车' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="交车时间" v-if="detailOrder.deliveredAt">{{ detailOrder.deliveredAt }}</el-descriptions-item>
+          <el-descriptions-item label="工时费" v-if="detailOrder.laborFee != null">&yen;{{ detailOrder.laborFee.toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="配件费" v-if="detailOrder.partsFee != null">&yen;{{ detailOrder.partsFee.toFixed(2) }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h, createApp } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { printHtml } from '@/utils/print'
+import QualityCheckPrint from '@/components/PrintTemplate/QualityCheckPrint.vue'
+
+/** 递归深度转义对象中所有字符串值（防御纵深，配合 Vue {{ }} 模板转义） */
+function deepEscape(data: any): any {
+  if (typeof data === 'string') return String(data)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+  if (Array.isArray(data)) return data.map(deepEscape)
+  if (data !== null && typeof data === 'object') {
+    const result: Record<string, any> = {}
+    for (const key of Object.keys(data)) {
+      result[key] = deepEscape(data[key])
+    }
+    return result
+  }
+  return data
+}
 
 // ==================== 类型定义 ====================
 interface RepairOrder {
@@ -298,6 +377,14 @@ const qualityFormRules: FormRules = {
   conclusion: [{ required: true, message: '请选择质检结论', trigger: 'change' }],
 }
 
+// ==================== 文件上传 ====================
+const fileList = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
+
+function handleFileChange(file: any) {
+  pendingFiles.value.push(file.raw)
+}
+
 // ==================== 交车弹窗 ====================
 const deliverDialogVisible = ref(false)
 const deliverSubmitLoading = ref(false)
@@ -364,7 +451,7 @@ async function fetchQualityRecords() {
   try {
     const res: any = await request.get('/repair', {
       params: {
-        status: 'quality_checked,delivered',
+        status: 'quality_check,completed,delivered',
         page: recordsPagination.page,
         pageSize: recordsPagination.pageSize,
       },
@@ -396,12 +483,16 @@ function handleQualityCheck(row: RepairOrder) {
   qualityForm.testDriveResult = 'pass'
   qualityForm.remark = ''
   qualityForm.conclusion = 'pass'
+  fileList.value = []
+  pendingFiles.value = []
   qualityDialogVisible.value = true
 }
 
 /** 关闭质检弹窗清理 */
 function handleQualityDialogClosed() {
   qualityFormRef.value?.resetFields()
+  fileList.value = []
+  pendingFiles.value = []
 }
 
 /** 提交质检 */
@@ -411,15 +502,64 @@ async function submitQualityCheck() {
 
   qualitySubmitLoading.value = true
   try {
-    await request.post('/repair/quality-check', {
+    const payload: Record<string, any> = {
       orderId: currentOrder.value!.id,
       checkItems: qualityForm.checkItems,
       testDriveResult: qualityForm.testDriveResult,
       remark: qualityForm.remark,
       conclusion: qualityForm.conclusion,
-    })
-    ElMessage.success(qualityForm.conclusion === 'pass' ? '质检通过' : '质检不通过')
+    }
+
+    // 上传质检照片
+    if (pendingFiles.value.length > 0) {
+      const urls = await uploadFiles(pendingFiles.value, 'quality')
+      payload.images = urls
+    }
+
+    await request.post('/repair/quality-check', payload)
+    const isPassed = qualityForm.conclusion === 'pass'
+    ElMessage.success(isPassed ? '质检通过' : '质检不通过')
     qualityDialogVisible.value = false
+
+    // 质检通过后询问是否打印质检报告
+    if (isPassed) {
+      setTimeout(() => {
+        ElMessageBox.confirm(
+          '质检已通过，是否打印质检报告？',
+          '打印确认',
+          {
+            confirmButtonText: '打印',
+            cancelButtonText: '暂不打印',
+            type: 'info',
+          },
+        )
+          .then(async () => {
+            const order = currentOrder.value
+            const printData = {
+              orderNo: order?.orderNo || '-',
+              customerName: order?.customerName || '-',
+              customerPhone: '-',
+              plateNumber: order?.plateNo || '-',
+              vehicleModel: '-',
+              checkResult: qualityForm.conclusion === 'pass' ? 'pass' : 'fail',
+              checker: order?.qualityCheckerName || order?.technicianName || '-',
+              remark: qualityForm.remark || '',
+              checkTime: new Date().toISOString(),
+            }
+            const container = document.createElement('div')
+            const safeData = deepEscape(printData)
+            const app = createApp({ render: () => h(QualityCheckPrint, { data: safeData }) })
+            app.mount(container)
+            await new Promise(r => setTimeout(r, 100))
+            printHtml(container.innerHTML)
+            app.unmount()
+          })
+          .catch(() => {
+            // 用户取消打印
+          })
+      }, 300)
+    }
+
     fetchPendingOrders()
   } catch {
     // 错误已在拦截器中处理
@@ -442,6 +582,29 @@ function handleDeliver(row: RepairOrder) {
 /** 关闭交车弹窗清理 */
 function handleDeliverDialogClosed() {
   deliverFormRef.value?.resetFields()
+}
+
+/** 工单状态映射 */
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    pending: '待派工',
+    assigned: '已派工',
+    repairing: '维修中',
+    quality_check: '待质检',
+    quality_checked: '已质检',
+    completed: '已完成',
+    delivered: '已交车',
+  }
+  return map[status] || status
+}
+
+/** 查看详情 */
+const drawerVisible = ref(false)
+const detailOrder = ref<RepairOrder | null>(null)
+
+function handleView(row: RepairOrder) {
+  detailOrder.value = row
+  drawerVisible.value = true
 }
 
 /** 提交交车 */

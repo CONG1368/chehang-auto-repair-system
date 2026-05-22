@@ -15,6 +15,8 @@
           @keyup.enter="handleSearch"
         />
         <el-button type="primary" @click="handleSearch">搜索</el-button>
+        <el-button type="success" @click="handleExportExcel">📥 导出Excel</el-button>
+        <el-button @click="handleExportPdf">📄 导出PDF</el-button>
         <el-button type="success" @click="handleAdd">新增客户</el-button>
       </div>
     </el-card>
@@ -26,7 +28,8 @@
         :data="tableData"
         border
         stripe
-        style="width: 100%"
+        style="width: 100%; cursor: pointer"
+        @row-click="handleDetail"
       >
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="姓名" width="120" />
@@ -40,7 +43,7 @@
         </el-table-column>
         <el-table-column label="车辆数" width="80" align="center">
           <template #default="{ row }">
-            {{ row.vehicleCount ?? 0 }}
+            {{ row.vehicles?.length || 0 }}
           </template>
         </el-table-column>
         <el-table-column label="会员等级" width="120">
@@ -59,7 +62,7 @@
             <span class="amount">¥{{ formatMoney(row.totalSpent) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="lastVisitTime" label="最近到店" width="160" />
+        <el-table-column prop="lastVisitAt" label="最近到店" width="160" />
         <el-table-column label="操作" min-width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleDetail(row)">详情</el-button>
@@ -138,6 +141,19 @@
             placeholder="请输入备注"
           />
         </el-form-item>
+        <el-form-item label="证件照片">
+          <el-upload
+            multiple
+            drag
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :file-list="fileList"
+            accept="image/*,.pdf"
+          >
+            <el-icon :size="32"><UploadFilled /></el-icon>
+            <div>拖拽或点击批量上传</div>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -179,8 +195,8 @@
               <el-descriptions-item label="累计消费">¥{{ formatMoney(detailCustomer.totalSpent) }}</el-descriptions-item>
               <el-descriptions-item label="标签">{{ detailCustomer.tags || '-' }}</el-descriptions-item>
               <el-descriptions-item label="备注">{{ detailCustomer.remark || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="最近到店">{{ detailCustomer.lastVisitTime || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="创建时间">{{ detailCustomer.createTime || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="最近到店">{{ detailCustomer.lastVisitAt || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ detailCustomer.createdAt || '-' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
 
@@ -199,13 +215,19 @@
                   {{ v.mileage ? v.mileage.toLocaleString() : '-' }}
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="140" fixed="right">
+                <template #default="{ row: v }">
+                  <el-button type="primary" link size="small" @click="handleEditVehicle(v)">编辑</el-button>
+                  <el-button type="danger" link size="small" @click="handleDeleteVehicle(v)">删除</el-button>
+                </template>
+              </el-table-column>
             </el-table>
             <el-empty v-if="!vehiclesLoading && vehicles.length === 0" description="暂无车辆信息" />
 
             <!-- 新增车辆弹窗 -->
             <el-dialog
               v-model="vehicleDialogVisible"
-              title="新增车辆"
+              :title="isVehicleEdit ? '编辑车辆' : '新增车辆'"
               width="500px"
               append-to-body
               destroy-on-close
@@ -257,7 +279,7 @@
               <el-timeline-item
                 v-for="item in follows"
                 :key="item.id"
-                :timestamp="item.createTime"
+                :timestamp="item.createdAt"
                 placement="top"
               >
                 <el-card shadow="hover">
@@ -265,7 +287,7 @@
                     <el-tag size="small" :type="getFollowTypeTag(item.type)">
                       {{ item.type }}
                     </el-tag>
-                    <span class="follow-user">跟进人：{{ item.createBy || '-' }}</span>
+                    <span class="follow-user">跟进人：{{ item.user?.realName || '-' }}</span>
                   </p>
                   <p class="follow-content">{{ item.content }}</p>
                 </el-card>
@@ -284,6 +306,10 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { downloadFile } from '@/utils/download'
+import { exportTableToPdf } from '@/utils/export-pdf'
+import { UploadFilled } from '@element-plus/icons-vue'
 
 // ==================== 类型定义 ====================
 
@@ -299,9 +325,9 @@ interface Customer {
   remark?: string
   level?: number
   totalSpent?: number
-  vehicleCount?: number
-  lastVisitTime?: string
-  createTime?: string
+  vehicles?: any[]
+  lastVisitAt?: string
+  createdAt?: string
 }
 
 interface Vehicle {
@@ -318,8 +344,8 @@ interface FollowRecord {
   id?: number
   type: string
   content: string
-  createBy?: string
-  createTime?: string
+  user?: { realName: string }
+  createdAt?: string
 }
 
 interface ApiResponse {
@@ -394,6 +420,39 @@ const resetForm = () => {
   formData.source = ''
   formData.tags = ''
   formData.remark = ''
+  fileList.value = []
+  pendingFiles.value = []
+}
+
+// ==================== 文件上传 ====================
+
+const fileList = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
+
+function handleFileChange(file: any) {
+  pendingFiles.value.push(file.raw)
+}
+
+function handleExportExcel() {
+  downloadFile('/api/export/excel?module=customers', '客户列表.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
+function handleExportPdf() {
+  exportTableToPdf(
+    '客户列表',
+    [
+      { header: '姓名', dataKey: 'name' },
+      { header: '电话', dataKey: 'phone' },
+      { header: '性别', dataKey: 'gender' },
+      { header: '来源', dataKey: 'source' },
+      { header: '累计消费', dataKey: 'totalSpent' },
+      { header: '最近到店', dataKey: 'lastVisitAt' },
+    ],
+    tableData.value,
+    '客户列表',
+  )
 }
 
 const handleAdd = () => {
@@ -423,6 +482,13 @@ const handleSubmit = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  let images: string[] | undefined
+  if (pendingFiles.value.length > 0) {
+    images = await uploadFiles(pendingFiles.value, 'customers')
+    pendingFiles.value = []
+    fileList.value = []
+  }
+
   submitLoading.value = true
   try {
     const payload = {
@@ -433,7 +499,8 @@ const handleSubmit = async () => {
       address: formData.address || undefined,
       source: formData.source || undefined,
       tags: formData.tags || undefined,
-      remark: formData.remark || undefined
+      remark: formData.remark || undefined,
+      images
     }
 
     if (isEdit.value && editId.value) {
@@ -506,6 +573,8 @@ const fetchVehicles = async () => {
 }
 
 const vehicleDialogVisible = ref(false)
+const isVehicleEdit = ref(false)
+const editVehicleId = ref<number | undefined>()
 const vehicleSubmitLoading = ref(false)
 const vehicleFormRef = ref<FormInstance>()
 
@@ -532,8 +601,41 @@ const resetVehicleForm = () => {
 }
 
 const handleAddVehicle = () => {
+  isVehicleEdit.value = false
+  editVehicleId.value = undefined
   resetVehicleForm()
   vehicleDialogVisible.value = true
+}
+
+const handleEditVehicle = (row: Vehicle) => {
+  if (!row.id) return
+  isVehicleEdit.value = true
+  editVehicleId.value = row.id
+  vehicleForm.plateNumber = row.plateNumber || ''
+  vehicleForm.brand = row.brand || ''
+  vehicleForm.series = row.series || ''
+  vehicleForm.model = row.model || ''
+  vehicleForm.vin = row.vin || ''
+  vehicleForm.mileage = row.mileage
+  vehicleDialogVisible.value = true
+}
+
+const handleDeleteVehicle = (row: Vehicle) => {
+  if (!row.id) return
+  ElMessageBox.confirm(`确定删除车辆「${row.plateNumber || '无车牌'}」吗？删除后不可恢复。`, '删除确认', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await request.delete(`/customers/${detailCustomer.value!.id}/vehicles/${row.id}`)
+      ElMessage.success('删除车辆成功')
+      fetchVehicles()
+      fetchList()
+    } catch {
+      // 错误已在拦截器中处理
+    }
+  }).catch(() => {})
 }
 
 const handleVehicleSubmit = async () => {
@@ -542,15 +644,22 @@ const handleVehicleSubmit = async () => {
 
   vehicleSubmitLoading.value = true
   try {
-    await request.post(`/customers/${detailCustomer.value!.id}/vehicles`, {
+    const payload = {
       plateNumber: vehicleForm.plateNumber,
       brand: vehicleForm.brand || undefined,
       series: vehicleForm.series || undefined,
       model: vehicleForm.model || undefined,
       vin: vehicleForm.vin || undefined,
       mileage: vehicleForm.mileage
-    })
-    ElMessage.success('新增车辆成功')
+    }
+
+    if (isVehicleEdit.value && editVehicleId.value) {
+      await request.put(`/customers/${detailCustomer.value!.id}/vehicles/${editVehicleId.value}`, payload)
+      ElMessage.success('编辑车辆成功')
+    } else {
+      await request.post(`/customers/${detailCustomer.value!.id}/vehicles`, payload)
+      ElMessage.success('新增车辆成功')
+    }
     vehicleDialogVisible.value = false
     fetchVehicles()
     // 刷新客户列表以更新车辆数

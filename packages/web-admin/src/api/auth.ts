@@ -7,3 +7,7 @@ export function login(data: { username: string; password: string }) {
 export function getUserInfo() {
   return request.get('/auth/userinfo');
 }
+
+export function updateProfile(data: { realName?: string; phone?: string; email?: string; avatar?: string }) {
+  return request.put('/auth/profile', data);
+}

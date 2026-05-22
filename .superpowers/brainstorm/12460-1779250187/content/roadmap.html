@@ -1,0 +1,64 @@
+<h2>四大功能实现路线图</h2>
+<p class="subtitle">车行综合管理系统 — 按依赖关系和投入产出比排序</p>
+
+<div class="section">
+  <h3>推荐实施顺序</h3>
+</div>
+
+<div class="cards">
+  <div class="card" style="border-left: 4px solid #409EFF;">
+    <div class="card-body">
+      <span class="label" style="background:#409EFF;color:#fff;padding:2px 8px;border-radius:3px;">第1步</span>
+      <h3>📬 消息通知中心</h3>
+      <p>WebSocket 已有，补消息持久化表 + 消息中心页面 + 点击跳转<br>
+      后端新增 Notification 表 + 4个API，前端新增消息中心页面 + 左侧菜单入口</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优势</h4><ul><li>WebSocket 已于 5 处业务点推送</li><li>改动最小，1天内可完成</li></ul></div>
+        <div class="cons"><h4>工作量</h4><ul><li>Prisma 1张表 | API 4个 | 前端 1个页面</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left: 4px solid #67C23A;">
+    <div class="card-body">
+      <span class="label" style="background:#67C23A;color:#fff;padding:2px 8px;border-radius:3px;">第2步</span>
+      <h3>📊 导出功能（Excel + PDF）</h3>
+      <p>报表页已有占位按钮，优先实现。<br>
+      后端用 exceljs/jspdf 生成文件流，前端触发下载</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>覆盖范围</h4><ul><li>6 个报表页面 | 4 个列表页面</li><li>对账报表按钮已存在（占位）</li></ul></div>
+        <div class="cons"><h4>工作量</h4><ul><li>后端 导出API | 前端 导出按钮 + PDF/Excel 模板</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left: 4px solid #E6A23C;">
+    <div class="card-body">
+      <span class="label" style="background:#E6A23C;color:#fff;padding:2px 8px;border-radius:3px;">第3步</span>
+      <h3>🖨️ 打印功能</h3>
+      <p>工单/接车单/销售合同/收据 — 7 处打印需求<br>
+      用 print-js + CSS @media print 实现打印模板</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>关键场景</h4><ul><li>维修工单打印 — 日常最高频操作</li><li>收银小票 — 客户付款凭证</li></ul></div>
+        <div class="cons"><h4>工作量</h4><ul><li>7 个打印模板 | 前端 print-js 集成</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="border-left: 4px solid #F56C6C;">
+    <div class="card-body">
+      <span class="label" style="background:#F56C6C;color:#fff;padding:2px 8px;border-radius:3px;">第4步</span>
+      <h3>📎 文件上传功能</h3>
+      <p>客户/车辆/配件/工单照片 + 采购合同扫描件 — 7 处上传需求<br>
+      后端 multer 文件接收 + 前端 el-upload 组件</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>核心价值</h4><ul><li>维修前/后照片对比 — 质量追溯</li><li>客户行驶证 — 身份核验</li></ul></div>
+        <div class="cons"><h4>工作量</h4><ul><li>后端文件存储 | 数据库字段 | 7个页面上传组件</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">请在浏览器中查看路线图，并在终端告诉我：<br>是否同意这个顺序？对某个步骤有调整意见吗？</p>
+</div>

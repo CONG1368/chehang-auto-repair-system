@@ -2,8 +2,12 @@
   <div class="dashboard-container">
     <!-- 顶部标题 -->
     <div class="dashboard-header">
-      <h1 class="dashboard-title">泰州车行维修厂部综合管理系统 - 数据大屏</h1>
-      <span class="dashboard-time">{{ currentTime }}</span>
+      <h1 class="dashboard-title">车行综合管理系统 - 数据大屏</h1>
+      <div class="dashboard-header-right">
+        <span class="dashboard-time">{{ currentTime }}</span>
+        <el-button type="warning" size="small" class="btn-export-pdf" @click="handlePrint">🖨️ 打印</el-button>
+        <el-button size="small" class="btn-export-pdf" @click="handleExportPdf">📄 导出PDF</el-button>
+      </div>
     </div>
 
     <!-- 主体三栏布局 -->
@@ -111,6 +115,20 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import VChart from 'vue-echarts';
 import 'echarts';
 import request from '@/api/request';
+import { exportElementToPdf } from '@/utils/export-pdf';
+
+const handlePrint = () => {
+  window.print()
+}
+
+const handleExportPdf = () => {
+  const el = document.querySelector('.dashboard-container') as HTMLElement
+  if (el) {
+    exportElementToPdf(el, '数据大屏')
+  } else {
+    console.error('未找到导出元素')
+  }
+}
 
 // 当前时间
 const currentTime = ref('');
@@ -349,11 +367,27 @@ onUnmounted(() => {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+.dashboard-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
 .dashboard-time {
   display: block;
   margin-top: 6px;
   font-size: 13px;
   color: #5a7a9a;
+}
+.btn-export-pdf {
+  margin-top: 6px;
+}
+
+@media print {
+  :deep(.el-button) { display: none; }
+  :deep(.el-pagination) { display: none; }
+  :deep(.btn-export-pdf) { display: none; }
+  .dashboard-header-right { display: none; }
 }
 
 /* 主体 */

@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { RepairService } from './repair.service';
@@ -46,8 +47,8 @@ export class RepairController {
   }
 
   @Put(':id/status')
-  async updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.repairService.updateStatus(+id, status);
+  async updateStatus(@Param('id') id: string, @Body('status') status: string, @Body('actualHours') actualHours?: number) {
+    return this.repairService.updateStatus(+id, status, actualHours);
   }
 
   @Post('dispatch')
@@ -64,13 +65,44 @@ export class RepairController {
   }
 
   @Post('quality-check')
-  async qualityCheck(@Body() dto: QualityCheckDto) {
-    return this.repairService.qualityCheck(dto);
+  async qualityCheck(@Body() body: QualityCheckDto, @Req() req: any) {
+    // 前端字段名与后端字段名映射（支持两种命名方式）
+    const repairOrderId = body.orderId ?? body.repairOrderId;
+    const checkerId = req.user?.id ?? body.checkerId ?? 0;
+    const isPassed = body.conclusion != null
+      ? (body.conclusion === 'pass' ? 1 : 0)
+      : (body.isPassed ?? 0);
+    body.repairOrderId = repairOrderId;
+    body.checkerId = checkerId;
+    body.isPassed = isPassed;
+    body.itemsChecked = body.checkItems ?? body.itemsChecked ?? [];
+    body.roadTest = body.testDriveResult ?? body.roadTest;
+
+    const result = await this.repairService.qualityCheck(body);
+
+    // 若有上传的质检照片，写入 repair_order.check_images
+    if (body.images && body.images.length > 0 && repairOrderId) {
+      await this.repairService.attachCheckImages(repairOrderId, body.images);
+    }
+
+    return result;
+  }
+
+  // 重新计算工单费用合计（显式路径在 :id 参数路由之前）
+  @Post(':id/calculate')
+  async calculateTotal(@Param('id') id: string) {
+    return this.repairService.calculateTotal(+id);
   }
 
   @Put(':id/deliver')
-  async deliver(@Param('id') id: string) {
-    return this.repairService.deliver(+id);
+  async deliver(
+    @Param('id') id: string,
+    @Body('laborFee') laborFee?: number,
+    @Body('partsFee') partsFee?: number,
+    @Body('discount') discount?: number,
+    @Body('finalAmount') finalAmount?: number,
+  ) {
+    return this.repairService.deliver(+id, { laborFee, partsFee, discount, finalAmount });
   }
 
   @Delete(':id')

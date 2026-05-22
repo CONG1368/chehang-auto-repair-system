@@ -1,0 +1,123 @@
+<h2>📬 消息通知中心 — 设计方案 v2</h2>
+<p class="subtitle">顶部铃铛图标（主入口）+ 左侧菜单（辅入口）双通道</p>
+
+<div class="section">
+  <h3>1. 顶部导航栏 — 铃铛图标（主入口）</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">MainLayout 顶栏 — 用户头像左侧新增铃铛</div>
+  <div class="mockup-body" style="padding:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid #e6e6e6;padding:12px 20px;">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <span style="font-size:18px;color:#303133;">☰</span>
+        <span style="font-size:13px;color:#909399;">首页 / 消息中心</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;">
+        <!-- 铃铛图标 -->
+        <div style="position:relative;cursor:pointer;padding:4px;">
+          <span style="font-size:22px;">🔔</span>
+          <span style="position:absolute;top:-2px;right:-4px;background:#f56c6c;color:#fff;font-size:10px;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;padding:0 4px;">5</span>
+        </div>
+        <span style="font-size:14px;color:#606266;">张三</span>
+        <span style="display:inline-block;width:32px;height:32px;background:#409EFF;color:#fff;border-radius:50%;text-align:center;line-height:32px;font-size:14px;">张</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 铃铛下拉面板 — 最近消息浮窗</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">点击铃铛 → 下拉面板（不离开当前页即可预览）</div>
+  <div class="mockup-body" style="padding:0;">
+    <div style="border:1px solid #e4e7ed;border-radius:8px;overflow:hidden;width:380px;box-shadow:0 4px 12px rgba(0,0,0,0.12);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #ebeef5;">
+        <span style="font-weight:600;font-size:14px;">消息通知</span>
+        <div style="display:flex;gap:8px;">
+          <span style="font-size:12px;color:#409EFF;cursor:pointer;">全部已读</span>
+          <span style="font-size:12px;color:#409EFF;cursor:pointer;">查看全部 →</span>
+        </div>
+      </div>
+      <!-- 消息项 -->
+      <div style="padding:10px 16px;background:#ecf5ff;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="font-size:14px;flex-shrink:0;">🔧</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:500;color:#303133;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">新工单 RO20260520-003 已创建</div>
+            <div style="font-size:12px;color:#909399;margin-top:2px;">客户：张三 · 车牌：苏A12345</div>
+            <div style="font-size:11px;color:#c0c4cc;margin-top:2px;">5 分钟前</div>
+          </div>
+          <div style="width:6px;height:6px;background:#409EFF;border-radius:50%;flex-shrink:0;margin-top:6px;"></div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="font-size:14px;flex-shrink:0;">📦</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;color:#303133;">配件「刹车片」库存不足</div>
+            <div style="font-size:12px;color:#909399;margin-top:2px;">当前库存 3，安全库存 10</div>
+            <div style="font-size:11px;color:#c0c4cc;margin-top:2px;">1 小时前</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;background:#fff;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="font-size:14px;flex-shrink:0;">📢</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;color:#303133;">系统维护通知</div>
+            <div style="font-size:12px;color:#909399;margin-top:2px;">今晚 22:00-24:00 进行维护升级</div>
+            <div style="font-size:11px;color:#c0c4cc;margin-top:2px;">昨天 09:00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 左侧菜单入口（辅入口，保持不变）</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">侧边栏 — 经营驾驶舱上方</div>
+  <div class="mockup-body">
+    <div style="background:#304156;padding:8px 0;color:#bfcbd9;font-size:14px;">
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">🔔</span> 消息中心
+        <span style="margin-left:auto;background:#f56c6c;color:#fff;font-size:11px;padding:1px 6px;border-radius:10px;">5</span>
+      </div>
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">📊</span> 经营驾驶舱
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 交互流程</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">用户操作路径</div>
+  <div class="mockup-body" style="padding:16px;font-size:14px;line-height:2;">
+    <div><strong>A. 快速预览路径：</strong></div>
+    <div>顶栏铃铛 🠖 下拉面板（最近5条） 🠖 点击单条消息 🠖 跳转目标页面 + 标记已读</div>
+    <div style="margin-top:12px;"><strong>B. 完整管理路径：</strong></div>
+    <div>顶栏铃铛 🠖 查看全部 → <span style="color:#409EFF;">/notifications</span> 消息中心页面</div>
+    <div>或</div>
+    <div>左侧菜单「消息中心」🠖 <span style="color:#409EFF;">/notifications</span> 消息中心页面</div>
+    <div style="margin-top:12px;"><strong>C. 已读/未读：</strong></div>
+    <div>单条消息：点击跳转时自动标记已读</div>
+    <div>批量操作：下拉面板「全部已读」或消息中心页面「全部标为已读」按钮</div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    顶层栏铃铛下拉 + 左侧菜单入口 + 消息中心页，三重路径覆盖全部使用场景。<br>
+    这个设计可以吗？可以的话我们进入第2步：导出功能设计。
+  </p>
+</div>

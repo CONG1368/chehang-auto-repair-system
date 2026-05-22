@@ -9,6 +9,8 @@ export interface UserInfo {
   username: string;
   realName: string;
   phone: string;
+  email?: string;
+  avatar?: string;
   roleId: number;
   roleName: string;
   permissions: string[];
@@ -20,9 +22,13 @@ export const useAuthStore = defineStore(
     const token = ref('');
     const userInfo = ref<UserInfo | null>(null);
 
-    async function login(username: string, password: string) {
+    async function login(username: string, password: string, remember?: boolean) {
       const res: any = await loginApi({ username, password });
       token.value = res.token;
+      if (remember) {
+        const data = btoa(JSON.stringify({ username, password }));
+        localStorage.setItem('auto-repair-remember', data);
+      }
       await fetchUserInfo();
     }
 
@@ -38,18 +44,21 @@ export const useAuthStore = defineStore(
       router.push('/login');
     }
 
+    function updateProfileInfo(data: Partial<UserInfo>) {
+      if (userInfo.value) {
+        Object.assign(userInfo.value, data);
+      }
+    }
+
     function hasPermission(permission: string): boolean {
       if (!userInfo.value) return false;
       if (userInfo.value.permissions.includes('*')) return true;
       return userInfo.value.permissions.includes(permission);
     }
 
-    return { token, userInfo, login, fetchUserInfo, logout, hasPermission };
+    return { token, userInfo, login, fetchUserInfo, logout, updateProfileInfo, hasPermission };
   },
   {
-    persist: {
-      key: 'auto-repair-auth',
-      paths: ['token'],
-    },
+    persist: true,
   },
 );

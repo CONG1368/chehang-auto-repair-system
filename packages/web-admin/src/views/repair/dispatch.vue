@@ -4,6 +4,11 @@
       <h2>技师派工</h2>
     </div>
     <el-card>
+      <div class="search-bar" style="display: flex; align-items: center; margin-bottom: 16px">
+        <el-button type="primary" @click="handleExport">
+          <el-icon><Download /></el-icon>导出Excel
+        </el-button>
+      </div>
       <el-tabs v-model="activeTab" @tab-change="handleTabChange">
         <!-- 待派工 -->
         <el-tab-pane label="待派工" name="pending">
@@ -13,6 +18,7 @@
             border
             stripe
             style="width: 100%"
+            @row-click="handleViewOrder"
           >
             <el-table-column prop="orderNo" label="工单号" min-width="140" />
             <el-table-column prop="plateNo" label="车牌" min-width="100" />
@@ -20,8 +26,11 @@
             <el-table-column prop="faultDesc" label="故障描述" min-width="200" show-overflow-tooltip />
             <el-table-column prop="itemCount" label="维修项目数" width="110" align="center" />
             <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-            <el-table-column label="操作" width="100" fixed="right">
+            <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="handleViewOrder(row)">
+                  查看
+                </el-button>
                 <el-button link type="primary" size="small" @click="handleDispatch(row)">
                   派工
                 </el-button>
@@ -50,6 +59,7 @@
             border
             stripe
             style="width: 100%"
+            @row-click="handleViewOrder"
           >
             <el-table-column prop="orderNo" label="工单号" min-width="140" />
             <el-table-column prop="plateNo" label="车牌" min-width="100" />
@@ -68,8 +78,11 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right">
+            <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="handleViewOrder(row)">
+                  查看
+                </el-button>
                 <el-button
                   link
                   type="success"
@@ -198,9 +211,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
+
+const router = useRouter()
 
 // ==================== 类型定义 ====================
 interface RepairOrder {
@@ -372,7 +390,7 @@ async function submitDispatch() {
   dispatchSubmitLoading.value = true
   try {
     await request.post('/repair/dispatch', {
-      orderId: currentOrder.value!.id,
+      repairOrderId: currentOrder.value!.id,
       technicianId: dispatchForm.technicianId,
       standardHours: dispatchForm.standardHours,
     })
@@ -405,7 +423,8 @@ async function submitComplete() {
 
   completeSubmitLoading.value = true
   try {
-    await request.put(`/repair/dispatch/${currentOrder.value!.id}/complete`, {
+    await request.put(`/repair/${currentOrder.value!.id}/status`, {
+      status: 'quality_check',
       actualHours: completeForm.actualHours,
     })
     ElMessage.success('维修完成')
@@ -418,7 +437,19 @@ async function submitComplete() {
   }
 }
 
+/** 跳转到工单详情页 */
+function handleViewOrder(row: RepairOrder) {
+  router.push(`/repair/orders?id=${row.id}`)
+}
+
 // ==================== 生命周期 ====================
+
+function handleExport() {
+  downloadFile('/api/export/excel?module=repair', '技师派工.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
 onMounted(() => {
   fetchPendingOrders()
 })

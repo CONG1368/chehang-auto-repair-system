@@ -1,8 +1,8 @@
 {
-  "name": "taizhou-auto-repair-system",
+  "name": "chehang-auto-repair-system",
   "version": "1.0.0",
   "private": true,
-  "description": "泰州车行维修厂部综合管理系统 - 数字化管理 · 智能化运营 · 一体化服务",
+  "description": "车行综合管理系统 - 数字化管理 · 智能化运营 · 一体化服务",
   "scripts": {
     "dev:server": "pnpm --filter server dev",
     "dev:web": "pnpm --filter web-admin dev",
@@ -13,8 +13,11 @@
     "db:generate": "pnpm --filter server db:generate",
     "db:migrate": "pnpm --filter server db:migrate",
     "db:seed": "pnpm --filter server db:seed",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "start:prod": "pnpm --filter server start:prod",
+    "db:push": "pnpm --filter server db:push",
+    "db:deploy": "pnpm --filter server db:deploy",
+    "test": "pnpm --filter server test",
+    "test:e2e": "npx playwright test --reporter=list"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "marked": "^18.0.4",
     "playwright": "^1.60.0"
   }
 }

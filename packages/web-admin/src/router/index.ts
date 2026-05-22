@@ -14,6 +14,12 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard',
     children: [
       {
+        path: 'notifications',
+        name: 'Notifications',
+        component: () => import('@/views/notifications/index.vue'),
+        meta: { title: '消息中心' },
+      },
+      {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
@@ -22,7 +28,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'sales',
         name: 'Sales',
-        redirect: '/sales/list',
+        redirect: '/sales/vehicles',
         meta: { title: '新车销售', icon: 'Sell' },
         children: [
           { path: 'vehicles', name: 'SalesVehicles', component: () => import('@/views/sales/vehicles.vue'), meta: { title: '车辆管理' } },
@@ -34,7 +40,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'repair',
         name: 'Repair',
-        redirect: '/repair/list',
+        redirect: '/repair/reception',
         meta: { title: '维修服务', icon: 'Tools' },
         children: [
           { path: 'reception', name: 'RepairReception', component: () => import('@/views/repair/reception.vue'), meta: { title: '接车开单' } },
@@ -53,6 +59,7 @@ const routes: RouteRecordRaw[] = [
           { path: 'packages', name: 'BeautyPackages', component: () => import('@/views/beauty/packages.vue'), meta: { title: '套餐管理' } },
           { path: 'cards', name: 'BeautyCards', component: () => import('@/views/beauty/cards.vue'), meta: { title: '会员卡管理' } },
           { path: 'schedule', name: 'BeautySchedule', component: () => import('@/views/beauty/schedule.vue'), meta: { title: '施工管理' } },
+          { path: 'recharges', name: 'BeautyRecharges', component: () => import('@/views/beauty/recharges.vue'), meta: { title: '充值记录' } },
         ],
       },
       {
@@ -65,6 +72,9 @@ const routes: RouteRecordRaw[] = [
           { path: 'reports', name: 'FinanceReports', component: () => import('@/views/finance/reports.vue'), meta: { title: '对账报表' } },
           { path: 'receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收应付' } },
           { path: 'profit', name: 'FinanceProfit', component: () => import('@/views/finance/profit.vue'), meta: { title: '利润分析' } },
+          { path: 'payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付账款' } },
+          { path: 'invoice', name: 'FinanceInvoice', component: () => import('@/views/finance/invoice.vue'), meta: { title: '发票管理' } },
+          { path: 'expenses', name: 'FinanceExpenses', component: () => import('@/views/finance/expenses.vue'), meta: { title: '费用管理' } },
         ],
       },
       {
@@ -100,6 +110,8 @@ const routes: RouteRecordRaw[] = [
           { path: 'sales', name: 'ReportSales', component: () => import('@/views/report/sales.vue'), meta: { title: '销售分析' } },
           { path: 'repair', name: 'ReportRepair', component: () => import('@/views/report/repair.vue'), meta: { title: '维修分析' } },
           { path: 'finance', name: 'ReportFinance', component: () => import('@/views/report/finance.vue'), meta: { title: '财务分析' } },
+          { path: 'beauty', name: 'ReportBeauty', component: () => import('@/views/report/beauty.vue'), meta: { title: '美容统计' } },
+          { path: 'performance', name: 'ReportPerformance', component: () => import('@/views/report/performance.vue'), meta: { title: '员工绩效' } },
         ],
       },
       {
@@ -108,11 +120,21 @@ const routes: RouteRecordRaw[] = [
         redirect: '/system/users',
         meta: { title: '系统管理', icon: 'Setting' },
         children: [
+          { path: 'settings', name: 'SystemSettings', component: () => import('@/views/system/settings.vue'), meta: { title: '系统设置' } },
           { path: 'users', name: 'SystemUsers', component: () => import('@/views/system/users.vue'), meta: { title: '用户管理' } },
           { path: 'roles', name: 'SystemRoles', component: () => import('@/views/system/roles.vue'), meta: { title: '角色管理' } },
+          { path: 'profile', name: 'SystemProfile', component: () => import('@/views/system/profile.vue'), meta: { title: '个人设置' } },
+          { path: 'logs', name: 'SystemLogs', component: () => import('@/views/system/logs.vue'), meta: { title: '操作日志' } },
         ],
       },
     ],
+  },
+  // 404 兜底路由
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/error/404.vue'),
+    meta: { title: '页面不存在', noAuth: true },
   },
 ];
 
@@ -122,7 +144,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _from, next) => {
-  document.title = `${to.meta.title || '管理系统'} - 泰州车行维修厂`;
+  document.title = `${to.meta.title || '管理系统'} - 车行`;
 
   if (to.meta.noAuth) {
     next();

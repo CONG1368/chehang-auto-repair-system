@@ -1,67 +1,113 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class ReportService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly redis?: RedisService,
+  ) {}
 
   // 经营驾驶舱汇总
-  async getDashboardSummary() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  async getDashboardSummary(startDate?: string, endDate?: string) {
+    const cacheKey = startDate || endDate
+      ? `dashboard:data:${startDate || ''}:${endDate || ''}`
+      : 'dashboard:data';
+
+    if (this.redis) {
+      const cached = await this.redis.getJson(cacheKey);
+      if (cached) return cached;
+    }
+
+    const dateWhere: any = {};
+    if (startDate || endDate) {
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        dateWhere.gte = s;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        dateWhere.lte = e;
+      }
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      dateWhere.gte = today;
+      dateWhere.lt = tomorrow;
+    }
 
     const [todayPayments, inRepair, newCustomers, todayOrders] = await Promise.all([
-      // 今日营收 - 从paymentRecord汇总
       this.prisma.paymentRecord.aggregate({
-        where: { createdAt: { gte: today, lt: tomorrow } },
+        where: { createdAt: dateWhere },
         _sum: { amount: true },
         _count: true,
       }),
-      // 在修车辆 - 从repairOrder查status未完成
       this.prisma.repairOrder.count({
         where: { status: { in: ['pending', 'assigned', 'repairing', 'quality_check'] } },
       }),
-      // 今日新增客户
       this.prisma.customer.count({
-        where: { createdAt: { gte: today, lt: tomorrow } },
+        where: { createdAt: dateWhere },
       }),
-      // 今日工单
       this.prisma.repairOrder.count({
-        where: { createdAt: { gte: today, lt: tomorrow } },
+        where: { createdAt: dateWhere },
       }),
     ]);
 
-    return {
+    const result = {
       todayRevenue: todayPayments._sum.amount || 0,
       todayOrderCount: todayOrders,
       inRepairCount: inRepair,
       newCustomerCount: newCustomers,
     };
+
+    if (this.redis) {
+      await this.redis.setJson(cacheKey, result, 300);
+    }
+
+    return result;
   }
 
-  // 营收趋势
+  // 营收趋势（一次查询，JS端按日聚合，避免N+1）
   async getRevenueTrend(days: number = 30) {
-    const results: { date: string; amount: number }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
+    const endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days + 1);
+    startDate.setHours(0, 0, 0, 0);
 
-      const agg = await this.prisma.paymentRecord.aggregate({
-        where: { createdAt: { gte: date, lt: nextDate } },
-        _sum: { amount: true },
-      });
+    const payments = await this.prisma.paymentRecord.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    });
 
-      results.push({
-        date: `${date.getMonth() + 1}/${date.getDate()}`,
-        amount: Number(agg._sum.amount) || 0,
-      });
+    // 初始化所有日期
+    const dailyMap: Record<string, number> = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      const key = `${d.getMonth() + 1}/${d.getDate()}`;
+      dailyMap[key] = 0;
     }
-    return results;
+
+    // JS 端按天聚合
+    for (const p of payments) {
+      const d = new Date(p.createdAt);
+      const key = `${d.getMonth() + 1}/${d.getDate()}`;
+      if (dailyMap[key] !== undefined) {
+        dailyMap[key] += Number(p.amount);
+      }
+    }
+
+    return Object.entries(dailyMap).map(([date, amount]) => ({
+      date,
+      amount: Math.round(amount * 100) / 100,
+    }));
   }
 
   // 业务占比
@@ -182,11 +228,101 @@ export class ReportService {
     return records.map((r) => ({
       id: r.id,
       paymentNo: r.paymentNo,
-      customerName: r.customer.name,
+      customerName: r.customer?.name || '',
       type: r.type,
       amount: r.amount,
       paymentMethod: r.paymentMethod,
       createdAt: r.createdAt,
     }));
+  }
+
+  async getBeautyStats(startDate?: string, endDate?: string) {
+    const dateWhere: any = {};
+    if (startDate || endDate) {
+      dateWhere.createdAt = {};
+      if (startDate) dateWhere.createdAt.gte = new Date(startDate);
+      if (endDate) dateWhere.createdAt.lte = new Date(endDate);
+    }
+
+    const [totalAppointments, byStatus, byServiceType, totalRevenue] = await Promise.all([
+      this.prisma.beautyAppointment.count({ where: dateWhere }),
+      this.prisma.beautyAppointment.groupBy({
+        by: ['status'],
+        where: dateWhere,
+        _count: true,
+      }),
+      this.prisma.beautyAppointment.groupBy({
+        by: ['serviceType'],
+        where: dateWhere,
+        _count: true,
+      }),
+      this.prisma.beautyAppointment.aggregate({
+        where: { ...dateWhere, status: 'completed' },
+        _sum: { totalAmount: true },
+      }),
+    ]);
+
+    return {
+      totalAppointments,
+      totalRevenue: Number(totalRevenue._sum.totalAmount) || 0,
+      byStatus: byStatus.map(s => ({ status: s.status, count: s._count })),
+      byServiceType: byServiceType.map(s => ({ serviceType: s.serviceType, count: s._count })),
+    };
+  }
+
+  async getStaffPerformance(startDate?: string, endDate?: string) {
+    const dateWhere: any = {};
+    if (startDate || endDate) {
+      dateWhere.createdAt = {};
+      if (startDate) dateWhere.createdAt.gte = new Date(startDate);
+      if (endDate) dateWhere.createdAt.lte = new Date(endDate);
+    }
+
+    const dispatchStats = await this.prisma.dispatchRecord.groupBy({
+      by: ['technicianId'],
+      where: dateWhere,
+      _count: true,
+    });
+
+    const technicianIds = dispatchStats.map(d => d.technicianId);
+    const technicians = technicianIds.length > 0
+      ? await this.prisma.sysUser.findMany({
+          where: { id: { in: technicianIds } },
+          select: { id: true, realName: true },
+        })
+      : [];
+
+    const techMap = new Map(technicians.map(t => [t.id, t.realName]));
+
+    const salesStats = await this.prisma.salesOrder.groupBy({
+      by: ['salesId'],
+      where: dateWhere,
+      _count: true,
+      _sum: { totalAmount: true },
+    });
+
+    const salesIds = salesStats.map(s => s.salesId);
+    const salesUsers = salesIds.length > 0
+      ? await this.prisma.sysUser.findMany({
+          where: { id: { in: salesIds } },
+          select: { id: true, realName: true },
+        })
+      : [];
+
+    const salesMap = new Map(salesUsers.map(u => [u.id, u.realName]));
+
+    return {
+      technicians: dispatchStats.map(d => ({
+        userId: d.technicianId,
+        name: techMap.get(d.technicianId) || '未知',
+        orderCount: d._count,
+      })),
+      sales: salesStats.map(s => ({
+        userId: s.salesId,
+        name: salesMap.get(s.salesId) || '未知',
+        orderCount: s._count,
+        totalAmount: Number(s._sum.totalAmount) || 0,
+      })),
+    };
   }
 }

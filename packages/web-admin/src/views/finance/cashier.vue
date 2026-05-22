@@ -18,6 +18,10 @@
           <el-icon v-if="item.icon" class="pay-method-icon"><component :is="item.icon" /></el-icon>
           {{ item.label }}
         </el-button>
+        <el-divider direction="vertical" />
+        <el-button type="success" @click="handleCreatePayment">
+          <el-icon><Plus /></el-icon>新增收款
+        </el-button>
       </div>
     </el-card>
 
@@ -157,6 +161,7 @@
             stripe
             size="small"
             height="calc(100vh - 700px)"
+            @row-click="handleView"
           >
             <el-table-column prop="paymentNo" label="支付单号" min-width="150" show-overflow-tooltip />
             <el-table-column prop="customerName" label="客户" min-width="80" />
@@ -171,10 +176,131 @@
               </template>
             </el-table-column>
             <el-table-column prop="createTime" label="时间" min-width="140" />
+            <el-table-column label="操作" width="80" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="handleView(row)">
+                  查看
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </div>
     </div>
+
+    <!-- 收款详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="收款详情"
+      size="480px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="viewRow">
+        <el-descriptions :column="1" border size="default">
+          <el-descriptions-item label="支付单号">{{ viewRow.paymentNo }}</el-descriptions-item>
+          <el-descriptions-item label="客户">{{ viewRow.customerName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="收款金额">¥{{ formatMoney(viewRow.amount) }}</el-descriptions-item>
+          <el-descriptions-item label="支付方式">
+            <el-tag size="small">{{ getPayMethodLabel(viewRow.payMethod) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="收款时间">{{ viewRow.createTime || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 新增收款弹窗 -->
+    <el-dialog
+      v-model="newPayDialogVisible"
+      title="新增收款"
+      width="520px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form
+        ref="newPayFormRef"
+        :model="newPayForm"
+        :rules="newPayFormRules"
+        label-width="90px"
+      >
+        <el-form-item label="客户" prop="customerId">
+          <el-select
+            v-model="newPayForm.customerId"
+            filterable
+            remote
+            reserve-keyword
+            placeholder="搜索客户姓名/电话"
+            :remote-method="searchCustomers"
+            :loading="customerSearchLoading"
+            clearable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in customerOptions"
+              :key="c.id"
+              :label="`${c.name} (${c.phone})`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="业务类型" prop="type">
+          <el-select v-model="newPayForm.type" placeholder="请选择业务类型" style="width: 100%">
+            <el-option label="维修收款" value="repair" />
+            <el-option label="销售收款" value="sales" />
+            <el-option label="美容收款" value="beauty" />
+            <el-option label="其他收款" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="收款金额" prop="amount">
+          <el-input-number
+            v-model="newPayForm.amount"
+            :min="0.01"
+            :precision="2"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="优惠(¥)" prop="discount">
+          <el-input-number
+            v-model="newPayForm.discount"
+            :min="0"
+            :max="newPayForm.amount"
+            :precision="2"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="实收金额">
+          <span class="amount-total" style="font-size:18px">¥{{ formatMoney(newPayActualAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="支付方式" prop="paymentMethod">
+          <el-select v-model="newPayForm.paymentMethod" placeholder="请选择支付方式" style="width: 100%">
+            <el-option
+              v-for="m in payMethods"
+              :key="m.value"
+              :label="m.label"
+              :value="m.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注" prop="remark">
+          <el-input
+            v-model="newPayForm.remark"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入备注（选填）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="newPayDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="newPayLoading" @click="handleNewPaySubmit">
+          确认收款
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 收款弹窗 -->
     <el-dialog
@@ -241,10 +367,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Refresh, Plus } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { printHtml } from '@/utils/print'
 import dayjs from 'dayjs'
 
 // ==================== 类型定义 ====================
@@ -254,6 +381,7 @@ interface RepairOrder {
   orderNo: string
   plateNumber: string
   customerName: string
+  customerId?: number
   totalAmount: number
   status: string
 }
@@ -261,6 +389,14 @@ interface RepairOrder {
 interface OrderListResponse {
   list: RepairOrder[]
   total: number
+}
+
+interface DailySummaryBackend {
+  date: string
+  totalRevenue: number
+  totalCount: number
+  byPaymentMethod: Record<string, number>
+  byType: Record<string, number>
 }
 
 interface DailySummary {
@@ -308,6 +444,16 @@ const getPayMethodLabel = (value: string): string => {
   return found ? found.label : value
 }
 
+// ==================== 详情抽屉 ====================
+
+const drawerVisible = ref(false)
+const viewRow = ref<PaymentRecord | null>(null)
+
+function handleView(row: PaymentRecord) {
+  viewRow.value = row
+  drawerVisible.value = true
+}
+
 // ==================== 待结算工单列表 ====================
 
 const searchKeyword = ref('')
@@ -326,7 +472,7 @@ const fetchOrders = async () => {
     const params: any = {
       page: orderPage.page,
       pageSize: orderPage.pageSize,
-      status: 'quality_check',
+      status: 'quality_check,completed',
     }
     if (searchKeyword.value.trim()) {
       params.keyword = searchKeyword.value.trim()
@@ -381,11 +527,13 @@ const handlePaySubmit = async () => {
 
   payLoading.value = true
   try {
-    await request.post('/finance/payments', {
-      orderId: payTarget.value!.id,
+    const res = await request.post<any, any>('/finance/payments', {
+      customerId: payTarget.value!.customerId || 0,
+      repairOrderId: payTarget.value!.id,
+      type: 'repair',
       amount: actualAmount.value,
       discount: payForm.discount,
-      payMethod: payForm.payMethod,
+      paymentMethod: payForm.payMethod,
       remark: payForm.remark || undefined,
     })
     ElMessage.success('收款成功')
@@ -393,10 +541,144 @@ const handlePaySubmit = async () => {
     fetchOrders()
     fetchDailySummary()
     fetchDailyPayments()
+
+    // 询问是否打印收据
+    setTimeout(() => {
+      const target = payTarget.value
+      ElMessageBox.confirm(
+        '收款成功，是否打印收据？',
+        '打印确认',
+        {
+          confirmButtonText: '打印收据',
+          cancelButtonText: '暂不打印',
+          type: 'info',
+        },
+      )
+        .then(async () => {
+          // 使用 CashierReceiptPrint 模板组件渲染打印内容
+          const { h, createApp } = await import('vue')
+          const { default: CashierReceiptPrint } = await import('@/components/PrintTemplate/CashierReceiptPrint.vue')
+          const container = document.createElement('div')
+          const safeData = {
+            paymentNo: res?.paymentNo || '-',
+            customerName: target?.customerName || '-',
+            customerPhone: res?.customer?.phone || '-',
+            type: '维修',
+            paymentMethod: getPayMethodLabel(payForm.payMethod),
+            amount: actualAmount.value,
+            discount: payForm.discount,
+            remark: payForm.remark || '-',
+            createdAt: new Date().toISOString(),
+          }
+          const app = createApp({ render: () => h(CashierReceiptPrint, { data: safeData }) })
+          app.mount(container)
+          await new Promise(r => setTimeout(r, 100))
+          printHtml(container.innerHTML)
+          app.unmount()
+        })
+        .catch(() => {
+          // 用户取消打印
+        })
+    }, 300)
   } catch {
     // 错误已在拦截器中处理
   } finally {
     payLoading.value = false
+  }
+}
+
+// ==================== 新增收款（独立收款，不关联工单） ====================
+
+const newPayDialogVisible = ref(false)
+const newPayLoading = ref(false)
+const newPayFormRef = ref<FormInstance>()
+const customerSearchLoading = ref(false)
+const customerOptions = ref<{ id: number; name: string; phone: string }[]>([])
+
+interface NewPayForm {
+  customerId: number | null
+  type: string
+  amount: number
+  discount: number
+  paymentMethod: string
+  remark: string
+}
+
+const newPayForm = reactive<NewPayForm>({
+  customerId: null,
+  type: 'repair',
+  amount: 0,
+  discount: 0,
+  paymentMethod: 'cash',
+  remark: '',
+})
+
+const newPayFormRules: FormRules = {
+  customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
+  type: [{ required: true, message: '请选择业务类型', trigger: 'change' }],
+  amount: [{ required: true, message: '请输入收款金额', trigger: 'blur' }],
+  paymentMethod: [{ required: true, message: '请选择支付方式', trigger: 'change' }],
+}
+
+const newPayActualAmount = computed(() => {
+  return Math.max(0, (newPayForm.amount || 0) - (newPayForm.discount || 0))
+})
+
+const searchCustomers = async (query: string) => {
+  if (!query || query.trim().length === 0) {
+    customerOptions.value = []
+    return
+  }
+  customerSearchLoading.value = true
+  try {
+    const res = await request.get<any, any>('/customers', {
+      params: { keyword: query.trim(), page: 1, pageSize: 20 },
+    })
+    customerOptions.value = (res?.list || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone || '-',
+    }))
+  } catch {
+    customerOptions.value = []
+  } finally {
+    customerSearchLoading.value = false
+  }
+}
+
+const handleCreatePayment = () => {
+  newPayForm.customerId = null
+  newPayForm.type = 'repair'
+  newPayForm.amount = 0
+  newPayForm.discount = 0
+  newPayForm.paymentMethod = currentPayMethod.value
+  newPayForm.remark = ''
+  customerOptions.value = []
+  newPayDialogVisible.value = true
+}
+
+const handleNewPaySubmit = async () => {
+  const valid = await newPayFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  newPayLoading.value = true
+  try {
+    await request.post('/finance/payments', {
+      customerId: newPayForm.customerId,
+      type: newPayForm.type,
+      amount: newPayActualAmount.value,
+      discount: newPayForm.discount,
+      paymentMethod: newPayForm.paymentMethod,
+      remark: newPayForm.remark || undefined,
+    })
+    ElMessage.success('收款成功')
+    newPayDialogVisible.value = false
+    fetchDailySummary()
+    fetchDailyPayments()
+  } catch {
+    // 错误已在拦截器中处理
+  } finally {
+    newPayLoading.value = false
   }
 }
 
@@ -417,14 +699,23 @@ const dailySummary = reactive<DailySummary>({
 
 const fetchDailySummary = async () => {
   try {
-    const res = await request.get<any, DailySummary>('/finance/daily-summary', {
+    const res = await request.get<any, DailySummaryBackend>('/finance/daily-summary', {
       params: { date: todayDate.value },
     })
     if (res) {
-      Object.assign(dailySummary, res)
+      const pm = res.byPaymentMethod || {}
+      Object.assign(dailySummary, {
+        totalIncome: res.totalRevenue || 0,
+        totalCount: res.totalCount || 0,
+        cashAmount: pm.cash || 0,
+        cardAmount: pm.card || 0,
+        wechatAmount: pm.wechat || 0,
+        alipayAmount: pm.alipay || 0,
+        memberAmount: pm.member || 0,
+        creditAmount: pm.credit || 0,
+      })
     }
   } catch {
-    // 使用模拟数据
     dailySummary.totalIncome = 0
     dailySummary.totalCount = 0
     dailySummary.cashAmount = 0
@@ -433,6 +724,7 @@ const fetchDailySummary = async () => {
     dailySummary.alipayAmount = 0
     dailySummary.memberAmount = 0
     dailySummary.creditAmount = 0
+    ElMessage.warning('今日汇总数据加载失败，当前显示为本地缓存数据')
   }
 }
 
@@ -444,11 +736,14 @@ const paymentLoading = ref(false)
 const fetchDailyPayments = async () => {
   paymentLoading.value = true
   try {
-    const res = await request.get<any, PaymentRecord[]>('/finance/daily-summary', {
-      params: { date: todayDate.value },
+    const res = await request.get<any, any>('/finance/payments', {
+      params: {
+        date: todayDate.value,
+        page: 1,
+        pageSize: 50,
+      },
     })
-    // daily-summary 可能包含 payments 字段，或者单独请求
-    paymentList.value = (res as any)?.payments || []
+    paymentList.value = res?.list || []
   } catch {
     paymentList.value = []
   } finally {

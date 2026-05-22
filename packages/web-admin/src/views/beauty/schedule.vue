@@ -38,6 +38,9 @@
           搜索
         </el-button>
         <el-button style="margin-left: 12px" @click="handleReset">重置</el-button>
+        <el-button style="margin-left: 12px" @click="handleExport">
+          <el-icon style="margin-right: 4px"><Download /></el-icon>导出Excel
+        </el-button>
         <el-button type="success" style="margin-left: auto" @click="handleAdd">
           新增预约
         </el-button>
@@ -50,9 +53,18 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleView"
       >
-        <el-table-column prop="customerName" label="客户姓名" min-width="100" />
-        <el-table-column prop="customerPhone" label="电话" min-width="120" />
+        <el-table-column label="客户姓名" min-width="100">
+          <template #default="{ row }">
+            {{ row.customer?.name || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="电话" min-width="120">
+          <template #default="{ row }">
+            {{ row.customer?.phone || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="服务类型" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.serviceType === 'package' ? 'warning' : 'primary'" size="small">
@@ -77,7 +89,7 @@
         </el-table-column>
         <el-table-column label="金额" width="100" align="center">
           <template #default="{ row }">
-            <span style="color: #e6a23c; font-weight: 500">¥{{ row.amount }}</span>
+            <span style="color: #e6a23c; font-weight: 500">¥{{ row.totalAmount || 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
@@ -87,20 +99,32 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="technicianName" label="施工技师" width="100" />
-        <el-table-column label="预约时间" width="170">
+        <el-table-column label="施工技师" width="100" align="center">
           <template #default="{ row }">
-            {{ row.appointmentTime || '-' }}
+            {{ row.assignedTo || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="预约时间" width="170">
           <template #default="{ row }">
+            {{ row.startTime || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="270" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="info"
+              size="small"
+              @click.stop="handleView(row)"
+            >
+              查看
+            </el-button>
             <el-button
               v-if="row.status === 'pending'"
               link
               type="primary"
               size="small"
-              @click="handleStartWork(row)"
+              @click.stop="handleStartWork(row)"
             >
               开始施工
             </el-button>
@@ -109,14 +133,14 @@
               link
               type="success"
               size="small"
-              @click="handleComplete(row)"
+              @click.stop="handleComplete(row)"
             >
               完成
             </el-button>
-            <el-button link type="primary" size="small" @click="handleEdit(row)">
+            <el-button link type="primary" size="small" @click.stop="handleEdit(row)">
               编辑
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" @click.stop="handleDelete(row)">
               取消
             </el-button>
           </template>
@@ -136,6 +160,50 @@
         />
       </div>
     </el-card>
+
+    <!-- 查看详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="施工详情"
+      size="480px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="viewRow">
+        <el-descriptions :column="1" border size="default">
+          <el-descriptions-item label="客户姓名">{{ viewRow.customer?.name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="联系电话">{{ viewRow.customer?.phone || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="服务类型">
+            <el-tag :type="viewRow.serviceType === 'package' ? 'warning' : 'primary'" size="small">
+              {{ viewRow.serviceType === 'package' ? '套餐' : '单项服务' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="服务项目">
+            <template v-if="viewRow.items && viewRow.items.length">
+              <el-tag
+                v-for="(item, idx) in viewRow.items"
+                :key="idx"
+                size="small"
+                style="margin: 2px 4px 2px 0"
+              >
+                {{ item.name || item }}
+              </el-tag>
+            </template>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="施工金额">¥{{ viewRow.totalAmount || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="施工技师">{{ viewRow.assignedTo || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="预约时间">{{ viewRow.startTime || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="当前状态">
+            <el-tag :type="statusTagType(viewRow.status)" size="small">
+              {{ statusLabel(viewRow.status) }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog
@@ -243,21 +311,24 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import request from '@/api/request'
+import { downloadFile } from '@/utils/download'
 
 // ==================== 类型定义 ====================
 interface Appointment {
   id: number
   customerId: number
-  customerName: string
-  customerPhone: string
+  customer?: {
+    name: string
+    phone: string
+  }
   serviceType: string
-  items: Array<{ id: number; name: string }>
-  amount: number
+  items: Array<{ serviceId?: number; packageId?: number; name?: string }>
+  totalAmount: number
   status: string
-  technicianId: number | null
-  technicianName: string
-  appointmentTime: string
+  assignedTo: number | null
+  startTime: string
 }
 
 interface Customer {
@@ -336,6 +407,15 @@ const isEdit = ref(false)
 const currentId = ref<number | null>(null)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
+
+// ==================== 详情抽屉 ====================
+const drawerVisible = ref(false)
+const viewRow = ref<Appointment | null>(null)
+
+function handleView(row: Appointment) {
+  viewRow.value = row
+  drawerVisible.value = true
+}
 
 const initForm = (): AppointmentForm => ({
   customerId: null,
@@ -457,6 +537,13 @@ function handleReset() {
   handleSearch()
 }
 
+/** 导出 Excel */
+function handleExport() {
+  downloadFile('/api/export/excel?module=beauty', '美容预约.xlsx').catch(() => {
+    ElMessage.error('导出失败')
+  })
+}
+
 /** 新增 */
 function handleAdd() {
   isEdit.value = false
@@ -471,14 +558,20 @@ function handleEdit(row: Appointment) {
   currentId.value = row.id
   form.customerId = row.customerId
   form.serviceType = row.serviceType
-  form.selectedId = row.items && row.items.length > 0 ? row.items[0].id : null
-  form.appointmentTime = row.appointmentTime
-  form.technicianId = row.technicianId
+
+  // 从 items 中提取 serviceId 或 packageId
+  const firstItem = row.items && row.items.length > 0 ? row.items[0] : null
+  form.selectedId = firstItem
+    ? (firstItem.serviceId ?? firstItem.packageId ?? (firstItem as any).id ?? null)
+    : null
+
+  form.appointmentTime = row.startTime
+  form.technicianId = row.assignedTo
 
   // 预填客户列表
-  if (row.customerName) {
+  if (row.customer) {
     customerList.value = [
-      { id: row.customerId, name: row.customerName, phone: row.customerPhone },
+      { id: row.customerId, name: row.customer.name, phone: row.customer.phone },
     ]
   }
 
@@ -497,17 +590,18 @@ async function handleSubmit() {
 
   submitLoading.value = true
   try {
+    // 后端 controller 会将 technicianId→assignedTo, appointmentTime→startTime, selectedId→items
     const payload = {
       customerId: form.customerId,
       serviceType: form.serviceType,
-      selectedId: form.selectedId,
       appointmentTime: form.appointmentTime,
       technicianId: form.technicianId,
+      selectedId: form.selectedId,
     }
 
     if (isEdit.value) {
       await request.put(`/beauty/appointments/${currentId.value}`, payload)
-      ElMessage.success('更新成功')
+      ElMessage.success('编辑成功')
     } else {
       await request.post('/beauty/appointments', payload)
       ElMessage.success('新增成功')
@@ -524,8 +618,9 @@ async function handleSubmit() {
 
 /** 删除/取消 */
 function handleDelete(row: Appointment) {
+  const customerName = row.customer?.name || '未知'
   ElMessageBox.confirm(
-    `确定要取消客户「${row.customerName}」的预约吗？`,
+    `确定要取消客户「${customerName}」的预约吗？`,
     '取消确认',
     {
       confirmButtonText: '确定',
@@ -549,8 +644,9 @@ function handleDelete(row: Appointment) {
 
 /** 状态变更：开始施工 */
 async function handleStartWork(row: Appointment) {
+  const customerName = row.customer?.name || '未知'
   ElMessageBox.confirm(
-    `确定将「${row.customerName}」的预约状态改为「施工中」吗？`,
+    `确定将「${customerName}」的预约状态改为「施工中」吗？`,
     '开始施工',
     {
       confirmButtonText: '确定',
@@ -574,8 +670,9 @@ async function handleStartWork(row: Appointment) {
 
 /** 状态变更：完成 */
 async function handleComplete(row: Appointment) {
+  const customerName = row.customer?.name || '未知'
   ElMessageBox.confirm(
-    `确定将「${row.customerName}」的施工标记为「已完成」吗？`,
+    `确定将「${customerName}」的施工标记为「已完成」吗？`,
     '完成确认',
     {
       confirmButtonText: '确定',

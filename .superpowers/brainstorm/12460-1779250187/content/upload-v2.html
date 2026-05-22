@@ -1,0 +1,117 @@
+<h2>📎 文件上传功能 — 设计方案 v2</h2>
+<p class="subtitle">更新：批量上传 · 不限制单文件大小 · multer 本地存储</p>
+
+<div class="section">
+  <h3>1. 核心变更</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#f56c6c;color:#fff;">
+        <th style="padding:10px 12px;text-align:left;border:1px solid #f56c6c;">变更项</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #f56c6c;">之前</th>
+        <th style="padding:10px 12px;text-align:left;border:1px solid #f56c6c;">现在</th>
+      </tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">文件大小</td><td style="border:1px solid #e4e7ed;">图片 max 5MB，附件 max 20MB</td><td style="background:#ecf5ff;border:1px solid #e4e7ed;"><strong>不限制</strong></td></tr>
+      <tr style="background:#fafafa;"><td style="padding:8px 12px;border:1px solid #e4e7ed;">上传方式</td><td style="border:1px solid #e4e7ed;">单张 / 多图</td><td style="background:#ecf5ff;border:1px solid #e4e7ed;"><strong>批量上传（一次选多文件）</strong></td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #e4e7ed;">上传组件</td><td style="border:1px solid #e4e7ed;">el-upload 单个</td><td style="background:#ecf5ff;border:1px solid #e4e7ed;"><strong>el-upload multiple + 拖拽 + 粘贴</strong></td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 批量上传组件设计</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">车辆管理 — 批量上传示例</div>
+  <div class="mockup-body" style="padding:16px;">
+    <div style="border:2px dashed #409EFF;border-radius:8px;padding:32px;text-align:center;margin-bottom:12px;cursor:pointer;background:#ecf5ff;">
+      <span style="font-size:36px;display:block;margin-bottom:8px;">📁</span>
+      <span style="color:#409EFF;font-size:15px;font-weight:500;">点击或拖拽文件到此区域批量上传</span>
+      <div style="font-size:12px;color:#909399;margin-top:4px;">支持 JPG / PNG / PDF / DOC，单次可选多个文件，无大小限制</div>
+    </div>
+    <!-- 已上传文件列表 -->
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;align-items:center;padding:8px 12px;background:#f5f7fa;border-radius:4px;">
+        <span style="font-size:18px;margin-right:8px;">🖼️</span>
+        <span style="flex:1;font-size:13px;">车辆外观_正面.jpg</span>
+        <span style="font-size:12px;color:#909399;margin-right:16px;">2.4 MB</span>
+        <span style="color:#67C23A;font-size:12px;margin-right:12px;">✓ 已上传</span>
+        <span style="color:#f56c6c;cursor:pointer;font-size:14px;">×</span>
+      </div>
+      <div style="display:flex;align-items:center;padding:8px 12px;background:#f5f7fa;border-radius:4px;">
+        <span style="font-size:18px;margin-right:8px;">🖼️</span>
+        <span style="flex:1;font-size:13px;">车辆内饰_驾驶位.jpg</span>
+        <span style="font-size:12px;color:#909399;margin-right:16px;">3.1 MB</span>
+        <span style="color:#67C23A;font-size:12px;margin-right:12px;">✓ 已上传</span>
+        <span style="color:#f56c6c;cursor:pointer;font-size:14px;">×</span>
+      </div>
+      <div style="display:flex;align-items:center;padding:8px 12px;background:#fdf6ec;border-radius:4px;">
+        <span style="font-size:18px;margin-right:8px;">📄</span>
+        <span style="flex:1;font-size:13px;">购车发票扫描件.pdf</span>
+        <span style="font-size:12px;color:#909399;margin-right:16px;">8.7 MB</span>
+        <div style="width:120px;height:4px;background:#e4e7ed;border-radius:2px;margin-right:12px;">
+          <div style="width:65%;height:100%;background:#409EFF;border-radius:2px;"></div>
+        </div>
+        <span style="color:#909399;font-size:12px;">65%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 后端 API 更新</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">统一批量上传接口</div>
+  <div class="mockup-body" style="padding:16px;font-family:monospace;font-size:13px;line-height:1.8;">
+<span style="color:#409EFF;">POST</span> /upload/batch?module=customers|vehicles|repair|quality|parts|purchase
+      Content-Type: multipart/form-data
+      files: [File, File, File, ...]   <span style="color:#909399;">← 批量文件</span>
+
+      → 返回 {
+          urls: ["/uploads/vehicles/xxx.jpg", "/uploads/vehicles/yyy.jpg"],
+          count: 2,
+          totalSize: 5500928
+        }
+
+<span style="color:#909399;">multer 配置：</span>
+  - dest: uploads/{module}/
+  - limits: {}          <span style="color:#f56c6c;">← 不设文件大小限制</span>
+  - fileFilter: 允许常见图片/文档格式
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 7 处上传场景（不变）</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#409EFF;color:#fff;">
+        <th style="padding:8px 12px;text-align:left;border:1px solid #409EFF;">页面</th>
+        <th style="padding:8px 12px;text-align:left;border:1px solid #409EFF;">上传内容</th>
+        <th style="padding:8px 12px;text-align:center;border:1px solid #409EFF;">批量</th>
+        <th style="padding:8px 12px;text-align:left;border:1px solid #409EFF;">DB字段</th>
+      </tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e4e7ed;">客户档案</td><td style="border:1px solid #e4e7ed;">身份证/行驶证照片</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:6px 12px;border:1px solid #e4e7ed;">车辆管理</td><td style="border:1px solid #e4e7ed;">车辆外观/内饰/发动机</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e4e7ed;">接车开单</td><td style="border:1px solid #e4e7ed;">故障部位照片</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:6px 12px;border:1px solid #e4e7ed;">质检交车</td><td style="border:1px solid #e4e7ed;">质检照片</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">checkImages Json</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e4e7ed;">配件管理</td><td style="border:1px solid #e4e7ed;">配件实物图</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">images Json</td></tr>
+      <tr style="background:#fafafa;"><td style="padding:6px 12px;border:1px solid #e4e7ed;">用户管理</td><td style="border:1px solid #e4e7ed;">头像</td><td style="text-align:center;border:1px solid #e4e7ed;">—</td><td style="font-family:monospace;border:1px solid #e4e7ed;">avatar</td></tr>
+      <tr><td style="padding:6px 12px;border:1px solid #e4e7ed;">采购管理</td><td style="border:1px solid #e4e7ed;">合同/发票扫描件</td><td style="text-align:center;border:1px solid #e4e7ed;">✅</td><td style="font-family:monospace;border:1px solid #e4e7ed;">attachments Json</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    ✅ 批量上传 · ✅ 无文件大小限制 · ✅ 拖拽+粘贴 · ✅ 进度显示<br>
+    四个功能设计全部完成，确认后我写完整设计文档并开始实现。
+  </p>
+</div>

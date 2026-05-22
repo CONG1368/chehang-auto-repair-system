@@ -1,0 +1,161 @@
+<h2>📬 消息通知中心 — 设计方案</h2>
+<p class="subtitle">WebSocket 已有 5 种推送，补齐持久化 + 消息列表 + 点击跳转</p>
+
+<div class="section">
+  <h3>1. 数据库设计 — Notification 表</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Prisma Schema: Notification</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8;padding:16px;">
+model Notification {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")     <span style="color:#67C23A">// null=全员通知</span>
+  type       String   @default("system")  <span style="color:#409EFF">// repair/stock/customer/system/beauty</span>
+  title      String                        <span style="color:#409EFF">// 标题</span>
+  content    String   @db.Text            <span style="color:#409EFF">// 内容</span>
+  targetType String?  @map("target_type") <span style="color:#E6A23C">// 跳转类型: repair_order/sales_lead/part/customer</span>
+  targetId   Int?     @map("target_id")   <span style="color:#E6A23C">// 跳转目标ID</span>
+  isRead     Boolean  @default(false)     @map("is_read")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime @default(now())     @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("notification")
+  @@index([userId, isRead])
+}
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. 消息中心页面布局</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">/notifications — 消息中心页面</div>
+  <div class="mockup-body">
+    <!-- 顶部操作栏 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px;background:#f5f7fa;border-radius:6px;">
+      <div style="display:flex;gap:8px;">
+        <span class="mock-input" style="width:120px;text-align:center;">全部 (12)</span>
+        <span class="mock-input" style="width:120px;text-align:center;">未读 (5)</span>
+        <span class="mock-input" style="width:120px;text-align:center;">工单通知</span>
+        <span class="mock-input" style="width:120px;text-align:center;">库存预警</span>
+      </div>
+      <button class="mock-button">全部标为已读</button>
+    </div>
+
+    <!-- 消息列表项 -->
+    <div style="border:1px solid #e4e7ed;border-radius:6px;overflow:hidden;">
+      <!-- 未读消息 -->
+      <div style="display:flex;align-items:center;padding:14px 16px;background:#ecf5ff;border-bottom:1px solid #ebeef5;cursor:pointer;">
+        <div style="width:8px;height:8px;background:#409EFF;border-radius:50%;margin-right:12px;flex-shrink:0;"></div>
+        <span style="font-size:12px;color:#909399;width:140px;">2026-05-20 14:30</span>
+        <span style="background:#409EFF;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;width:60px;text-align:center;">工单通知</span>
+        <span style="font-weight:500;margin-left:12px;flex:1;">新工单 RO20260520-003 已创建 — 客户：张三 · 车牌：苏A12345</span>
+        <span style="color:#909399;font-size:12px;">查看 →</span>
+      </div>
+      <!-- 已读消息 -->
+      <div style="display:flex;align-items:center;padding:14px 16px;background:#fff;border-bottom:1px solid #ebeef5;cursor:pointer;">
+        <div style="width:8px;height:8px;background:transparent;margin-right:12px;flex-shrink:0;"></div>
+        <span style="font-size:12px;color:#909399;width:140px;">2026-05-19 10:15</span>
+        <span style="background:#E6A23C;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;width:60px;text-align:center;">库存预警</span>
+        <span style="margin-left:12px;flex:1;">配件「刹车片」库存不足 — 当前库存 3，安全库存 10</span>
+        <span style="color:#909399;font-size:12px;">已读</span>
+      </div>
+      <div style="display:flex;align-items:center;padding:14px 16px;background:#fff;border-bottom:1px solid #ebeef5;cursor:pointer;">
+        <div style="width:8px;height:8px;background:transparent;margin-right:12px;flex-shrink:0;"></div>
+        <span style="font-size:12px;color:#909399;width:140px;">2026-05-19 09:00</span>
+        <span style="background:#67C23A;color:#fff;font-size:11px;padding:2px 6px;border-radius:3px;width:60px;text-align:center;">系统公告</span>
+        <span style="margin-left:12px;flex:1;">系统将于今晚 22:00-24:00 进行维护升级</span>
+        <span style="color:#909399;font-size:12px;">已读</span>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <div style="display:flex;justify-content:center;margin-top:16px;">
+      <span style="color:#909399;font-size:13px;">共 12 条消息 · 第 1/2 页</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. 点击跳转逻辑</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">消息点击 → 跳转目标</div>
+  <div class="mockup-body" style="padding:16px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#f5f7fa;">
+        <th style="padding:8px 12px;text-align:left;border:1px solid #e4e7ed;">消息类型</th>
+        <th style="padding:8px 12px;text-align:left;border:1px solid #e4e7ed;">点击行为</th>
+        <th style="padding:8px 12px;text-align:left;border:1px solid #e4e7ed;">targetType</th>
+        <th style="padding:8px 12px;text-align:left;border:1px solid #e4e7ed;">跳转路由</th>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">🔧 新工单通知</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">打开工单详情抽屉</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">repair_order</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">/repair/orders → 详情抽屉</td>
+      </tr>
+      <tr style="background:#fafafa;">
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">📦 库存预警</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">跳转配件列表（搜索该配件）</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">part</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">/inventory/parts?keyword=刹车片</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">👤 新客户注册</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">打开客户详情抽屉</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">customer</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">/customer/list → 详情抽屉</td>
+      </tr>
+      <tr style="background:#fafafa;">
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">📋 状态变更</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">打开工单详情抽屉</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">repair_order</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">/repair/orders → 详情抽屉</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">📢 系统公告</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">展开公告详情弹窗</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">-</td>
+        <td style="padding:8px 12px;border:1px solid #e4e7ed;">弹窗展示全文</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 左侧菜单入口</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">MainLayout — 侧边栏顶部新增入口</div>
+  <div class="mockup-body">
+    <div style="background:#304156;padding:8px 0;color:#bfcbd9;font-size:14px;">
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">📊</span> 经营驾驶舱
+      </div>
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;background:rgba(64,158,255,0.1);color:#409EFF;font-weight:500;">
+        <span style="font-size:16px;">🔔</span> 消息中心
+        <span style="margin-left:auto;background:#f56c6c;color:#fff;font-size:11px;padding:1px 6px;border-radius:10px;">5</span>
+      </div>
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">🚗</span> 新车销售
+      </div>
+      <div style="padding:10px 20px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">🔧</span> 维修服务
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle" style="text-align:center;margin-top:24px;">
+    设计方案包括：DB表 → API → 消息中心页面 → 点击跳转 → 左侧菜单入口<br>
+    请问这个设计是否符合你的预期？有什么要调整的吗？
+  </p>
+</div>

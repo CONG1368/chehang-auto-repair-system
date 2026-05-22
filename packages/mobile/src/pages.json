@@ -3,7 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "泰州车行维修厂"
+        "navigationBarTitleText": "车行"
       }
     },
     {
@@ -179,11 +179,89 @@
       "style": {
         "navigationBarTitleText": "交车管理"
       }
+    },
+    {
+      "path": "pages/finance/payable",
+      "style": {
+        "navigationBarTitleText": "应付账款"
+      }
+    },
+    {
+      "path": "pages/finance/invoice",
+      "style": {
+        "navigationBarTitleText": "发票管理"
+      }
+    },
+    {
+      "path": "pages/finance/expenses",
+      "style": {
+        "navigationBarTitleText": "费用管理"
+      }
+    },
+    {
+      "path": "pages/beauty/recharges",
+      "style": {
+        "navigationBarTitleText": "充值记录"
+      }
+    },
+    {
+      "path": "pages/report/overview",
+      "style": {
+        "navigationBarTitleText": "数据大屏"
+      }
+    },
+    {
+      "path": "pages/report/sales",
+      "style": {
+        "navigationBarTitleText": "销售分析"
+      }
+    },
+    {
+      "path": "pages/report/repair",
+      "style": {
+        "navigationBarTitleText": "维修分析"
+      }
+    },
+    {
+      "path": "pages/report/finance",
+      "style": {
+        "navigationBarTitleText": "财务分析"
+      }
+    },
+    {
+      "path": "pages/report/beauty",
+      "style": {
+        "navigationBarTitleText": "美容统计"
+      }
+    },
+    {
+      "path": "pages/report/performance",
+      "style": {
+        "navigationBarTitleText": "员工绩效"
+      }
+    },
+    {
+      "path": "pages/system/settings",
+      "style": {
+        "navigationBarTitleText": "系统设置"
+      }
+    },
+    {
+      "path": "pages/system/logs",
+      "style": {
+        "navigationBarTitleText": "操作日志"
+      }
+    },
+    {
+      "path": "pages/notifications/index",
+      "style": {
+        "navigationBarTitleText": "消息通知"
+      }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "white",
-    "navigationBarTitleText": "泰州车行维修厂",
+    "navigationBarTitleText": "车行",
     "navigationBarBackgroundColor": "#409EFF",
     "backgroundColor": "#f5f5f5"
   },

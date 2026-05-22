@@ -36,13 +36,14 @@
         border
         stripe
         style="width: 100%; margin-top: 16px"
+        @row-click="handleDetail"
       >
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="realName" label="姓名" min-width="100" />
         <el-table-column prop="phone" label="手机号" min-width="130" />
         <el-table-column label="角色" min-width="120">
           <template #default="{ row }">
-            {{ row.roleName || '-' }}
+            {{ row.role?.name || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="80" align="center">
@@ -55,8 +56,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
+            <el-button link type="info" size="small" @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button link type="primary" size="small" @click="handleEdit(row)">
               编辑
             </el-button>
@@ -80,6 +84,49 @@
         />
       </div>
     </el-card>
+
+    <!-- 详情抽屉 -->
+    <el-drawer
+      v-model="drawerVisible"
+      title="用户详情"
+      size="480px"
+      :close-on-click-modal="false"
+    >
+      <template v-if="detailRow">
+        <el-descriptions :column="1" border size="default">
+          <el-descriptions-item label="用户名">{{ detailRow.username }}</el-descriptions-item>
+          <el-descriptions-item label="姓名">{{ detailRow.realName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="手机号">{{ detailRow.phone || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="邮箱">{{ detailRow.email || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="角色">
+            <el-tag size="small">{{ detailRow.role?.name || '未分配' }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="权限">
+            <template v-if="detailPermissions.length">
+              <el-tag
+                v-for="(perm, idx) in detailPermissions"
+                :key="idx"
+                size="small"
+                style="margin: 2px 4px 2px 0"
+              >
+                {{ permissionLabelMap[perm] || perm }}
+              </el-tag>
+            </template>
+            <span v-else-if="detailRow.role?.name === '超级管理员'">全部权限（*）</span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="detailRow.status === 1 ? 'success' : 'info'" size="small">
+              {{ detailRow.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ detailRow.createdAt || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog
@@ -115,6 +162,11 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" />
         </el-form-item>
+        <el-form-item label="头像">
+          <el-upload :auto-upload="false" :on-change="handleAvatarChange" :file-list="avatarList" accept="image/*" :limit="1">
+            <el-button type="primary">选择头像</el-button>
+          </el-upload>
+        </el-form-item>
         <el-form-item label="角色" prop="roleId">
           <el-select v-model="form.roleId" placeholder="请选择角色" style="width: 100%">
             <el-option
@@ -149,6 +201,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import request from '@/api/request'
+import { uploadFiles } from '@/utils/upload'
+import { permissionLabelMap } from '@/constants/permissions'
 
 // ==================== 类型定义 ====================
 interface User {
@@ -158,7 +212,7 @@ interface User {
   phone: string
   email: string
   roleId: number | null
-  roleName: string
+  role?: { name: string }
   status: number
   createdAt: string
   _statusLoading?: boolean
@@ -203,6 +257,41 @@ const currentUserId = ref<number | null>(null)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
+// ==================== 详情抽屉 ====================
+const drawerVisible = ref(false)
+const detailRow = ref<User | null>(null)
+const detailPermissions = ref<string[]>([])
+
+async function handleDetail(row: User) {
+  detailRow.value = row
+  drawerVisible.value = true
+
+  // 获取角色权限信息
+  if (row.roleId) {
+    try {
+      const res: any = await request.get(`/roles/${row.roleId}`)
+      if (res && res.permissions) {
+        detailPermissions.value = typeof res.permissions === 'string'
+          ? JSON.parse(res.permissions)
+          : res.permissions
+      } else {
+        detailPermissions.value = []
+      }
+    } catch {
+      // 查询角色时尝试从本地 roleList 获取
+      const role = roleList.value.find((r: any) => r.id === row.roleId)
+      if (role && (role as any).permissions) {
+        const perms = (role as any).permissions
+        detailPermissions.value = typeof perms === 'string' ? JSON.parse(perms) : perms
+      } else {
+        detailPermissions.value = []
+      }
+    }
+  } else {
+    detailPermissions.value = []
+  }
+}
+
 const initForm = (): UserForm => ({
   username: '',
   password: '',
@@ -214,6 +303,14 @@ const initForm = (): UserForm => ({
 })
 
 const form = reactive<UserForm>(initForm())
+
+// ==================== 头像上传 ====================
+const avatarList = ref<any[]>([])
+const pendingAvatar = ref<File | null>(null)
+
+function handleAvatarChange(file: any) {
+  pendingAvatar.value = file.raw
+}
 
 // ==================== 角色列表 ====================
 const roleList = ref<Role[]>([])
@@ -288,6 +385,8 @@ function handleAdd() {
   isEdit.value = false
   currentUserId.value = null
   Object.assign(form, initForm())
+  avatarList.value = []
+  pendingAvatar.value = null
   dialogVisible.value = true
 }
 
@@ -302,12 +401,16 @@ function handleEdit(row: User) {
   form.email = row.email
   form.roleId = row.roleId
   form.status = row.status
+  avatarList.value = []
+  pendingAvatar.value = null
   dialogVisible.value = true
 }
 
 /** 弹窗关闭后清理验证 */
 function handleDialogClosed() {
   formRef.value?.resetFields()
+  avatarList.value = []
+  pendingAvatar.value = null
 }
 
 /** 提交表单 */
@@ -329,6 +432,14 @@ async function handleSubmit() {
     // 新增时必传密码，编辑时仅当填写了密码才传
     if (!isEdit.value || form.password) {
       payload.password = form.password
+    }
+
+    // 上传头像
+    if (pendingAvatar.value) {
+      const urls = await uploadFiles([pendingAvatar.value], 'avatars')
+      if (urls.length > 0) {
+        payload.avatar = urls[0]
+      }
     }
 
     if (isEdit.value) {
