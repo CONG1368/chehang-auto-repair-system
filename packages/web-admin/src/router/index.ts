@@ -144,7 +144,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _from, next) => {
-  document.title = `${to.meta.title || '管理系统'} - 车行`;
+  document.title = `${to.meta.title || '管理系统'} - 车行综合管理系统`;
 
   if (to.meta.noAuth) {
     next();

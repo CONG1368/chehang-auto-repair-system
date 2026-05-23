@@ -267,7 +267,7 @@ async function main() {
   await prisma.systemConfig.createMany({
     data: [
       { key: 'logo', value: '' },
-      { key: 'appName', value: '车行' },
+      { key: 'appName', value: '车行综合管理系统' },
     ],
   });
   console.log('  ✅ 系统配置\n');

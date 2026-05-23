@@ -4,7 +4,7 @@
     <el-aside :width="sidebarHidden ? '0px' : (isCollapse ? '64px' : '220px')" class="sidebar" :class="{ 'sidebar--hidden': sidebarHidden }">
       <div class="logo">
         <img v-if="systemConfig.logo" :src="systemConfig.logo" class="logo-img" />
-        <span v-show="!isCollapse" class="logo-text">{{ systemConfig.appName || '车行' }}</span>
+        <span v-show="!isCollapse" class="logo-text">{{ systemConfig.appName || '车行综合管理系统' }}</span>
       </div>
 
       <el-menu
@@ -229,7 +229,7 @@ const isCollapse = ref(false);
 const sidebarHidden = ref(false);
 
 const router = useRouter()
-const systemConfig = reactive({ logo: '', appName: '车行' });
+const systemConfig = reactive({ logo: '', appName: '车行综合管理系统' });
 const unreadCount = ref(0)
 const recentNotifications = ref<any[]>([])
 
